@@ -1,0 +1,32 @@
+# 用户偏好（自动生成，记录上次压测参数）
+# 每次启动压测时保存，打开压测页自动回显；可手动删除恢复默认
+last_used:
+  # 上次勾选的压测目标
+  targets: []
+    #- provider: 模型提供商名称
+    #  model: 模型id
+
+  # 请求协议
+  # openai | anthropic
+  api_style: openai
+
+  # 压测参数
+  # short / medium / long / very_long / 1m / custom
+  prompt: medium
+  custom_prompt: null
+  max_tokens: 500
+  concurrency:
+    - 1
+    # duration | requests
+  budget_mode: requests
+  duration:
+  requests: 10
+  stream: true
+  enable_thinking: false
+  # record | warmup
+  cache_mode: record
+  cache_warmup: 0
+  warmup: 0
+  retry: 0
+  timeout: 120
+  wait_time: 0.0

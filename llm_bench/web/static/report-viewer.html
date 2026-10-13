@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>报告预览</title>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --bg: #ffffff;
+    --code-bg: #f6f8fa;
+    --accent: #0969da;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .toolbar a {
+    margin-left: auto;
+    text-decoration: none;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 6px;
+  }
+  .toolbar a:hover { background: var(--code-bg); }
+  .container { max-width: 920px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin: 1.6em 0 .6em; font-weight: 600; }
+  h1 { font-size: 1.9em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+  h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+  h3 { font-size: 1.25em; }
+  p { margin: .7em 0; }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    background: var(--code-bg);
+    padding: .15em .4em;
+    border-radius: 5px;
+    font-size: .88em;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; font-size: .85em; line-height: 1.5; }
+  blockquote {
+    margin: .8em 0;
+    padding: .2em 1em;
+    color: var(--muted);
+    border-left: 4px solid var(--border);
+  }
+  table {
+    border-collapse: collapse;
+    margin: 1em 0;
+    display: block;
+    overflow-x: auto;
+  }
+  th, td { border: 1px solid var(--border); padding: 7px 14px; text-align: left; white-space: nowrap; }
+  th { background: var(--code-bg); font-weight: 600; }
+  tr:nth-child(even) td { background: #fbfcfd; }
+  ul, ol { padding-left: 2em; margin: .6em 0; }
+  li { margin: .25em 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.6em 0; }
+  img { max-width: 100%; }
+  .error {
+    margin: 40px auto; max-width: 600px; padding: 20px 24px;
+    border: 1px solid #f0a19c; background: #fff5f5;
+    border-radius: 8px; color: #a40e26;
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span id="crumb">报告预览</span>
+  <a id="rawLink" href="#" target="_blank" rel="noopener">新窗口打开原文</a>
+  <a id="downloadLink" href="#">下载原文件</a>
+</div>
+<div class="container" id="content">
+  <p class="muted">加载中...</p>
+</div>
+
+<script>
+// ── 轻量级 Markdown 渲染器（自包含、无外部依赖，覆盖报告常用语法） ──
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderInline(text) {
+  let t = escapeHtml(text);
+  // 图片
+  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,
+    '<img alt="$1" src="$2">');
+  // 链接
+  t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 行内代码
+  t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // 粗体 / 斜体
+  t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  t = t.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  t = t.replace(/(^|[\s(])_([^_\n]+)_/g, '$1<em>$2</em>');
+  // 删除线
+  t = t.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  return t;
+}
+
+function isTableSep(line) {
+  const s = line.trim();
+  if (!s.includes('-') || !s.includes('|')) return false;
+  return /^\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?$/.test(s);
+}
+
+function splitRow(line) {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|') && !s.endsWith('\\|')) s = s.slice(0, -1);
+  return s.split('|').map(c => c.trim());
+}
+
+// 解析嵌套列表，支持多级缩进
+function parseList(lines, startIndex, listType) {
+  const items = [];
+  let i = startIndex;
+  const firstLine = lines[i];
+  const baseIndent = firstLine.match(/^(\s*)/)[1].length;
+  const listPattern = listType === 'ul' ? /^\s*[-*+]\s+/ : /^\s*\d+[.)]\s+/;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+
+    const match = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+    if (!match) break;
+
+    const indent = match[1].length;
+    const content = match[3];
+
+    // 如果缩进小于基准缩进，说明列表结束
+    if (indent < baseIndent) break;
+
+    // 如果是同级列表项
+    if (indent === baseIndent && listPattern.test(line)) {
+      items.push({ content, children: [] });
+      i++;
+    }
+    // 如果是子列表项（缩进更大）
+    else if (indent > baseIndent && items.length > 0) {
+      // 递归解析子列表
+      const childResult = parseList(lines, i, listType);
+      items[items.length - 1].children.push(childResult.html);
+      i = childResult.nextIndex;
+    }
+    else {
+      break;
+    }
+  }
+
+  let html = `<${listType}>`;
+  for (const item of items) {
+    html += `<li>${renderInline(item.content)}`;
+    if (item.children.length > 0) {
+      html += item.children.join('');
+    }
+    html += '</li>';
+  }
+  html += `</${listType}>`;
+
+  return { html, nextIndex: i };
+}
+
+function renderMarkdown(md) {
+  const lines = md.replace(/\r\n/g, '\n').replace(/\t/g, '    ').split('\n');
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // 代码块
+    const fence = line.match(/^\s*(```+|~~~+)(.*)$/);
+    if (fence) {
+      const marker = fence[1][0];
+      const lang = fence[2].trim();
+      const buf = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith(marker.repeat(3))) {
+        buf.push(lines[i]);
+        i++;
+      }
+      i++; // 跳过结束围栏
+      const cls = lang ? ` class="language-${escapeHtml(lang)}"` : '';
+      out.push(`<pre><code${cls}>${escapeHtml(buf.join('\n'))}</code></pre>`);
+      continue;
+    }
+
+    // 空行
+    if (!line.trim()) { i++; continue; }
+
+    // 标题
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      const level = h[1].length;
+      out.push(`<h${level}>${renderInline(h[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    // 分隔线
+    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
+      out.push('<hr>');
+      i++;
+      continue;
+    }
+
+    // 引用块
+    if (/^\s*>/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\s*>?/.test(lines[i]) && (lines[i].trim().startsWith('>') || (buf.length && lines[i].trim()))) {
+        if (!lines[i].trim()) break;
+        buf.push(lines[i].replace(/^\s*>\s?/, ''));
+        i++;
+      }
+      out.push(`<blockquote>${renderMarkdown(buf.join('\n'))}</blockquote>`);
+      continue;
+    }
+
+    // 表格（表头 + 分隔行）
+    if (line.includes('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+      const headers = splitRow(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+        rows.push(splitRow(lines[i]));
+        i++;
+      }
+      let html = '<table><thead><tr>';
+      headers.forEach(hdr => { html += `<th>${renderInline(hdr)}</th>`; });
+      html += '</tr></thead><tbody>';
+      rows.forEach(row => {
+        html += '<tr>';
+        for (let c = 0; c < headers.length; c++) {
+          html += `<td>${renderInline(row[c] || '')}</td>`;
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      out.push(html);
+      continue;
+    }
+
+    // 无序列表（支持嵌套）
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const result = parseList(lines, i, 'ul');
+      out.push(result.html);
+      i = result.nextIndex;
+      continue;
+    }
+
+    // 有序列表（支持嵌套）
+    if (/^\s*\d+[.)]\s+/.test(line)) {
+      const result = parseList(lines, i, 'ol');
+      out.push(result.html);
+      i = result.nextIndex;
+      continue;
+    }
+
+    // 普通段落（连续非空行合并）
+    const buf = [];
+    while (i < lines.length && lines[i].trim() &&
+           !/^(#{1,6})\s/.test(lines[i]) && !/^\s*(```+|~~~+)/.test(lines[i]) &&
+           !/^\s*>/.test(lines[i]) && !/^\s*[-*+]\s/.test(lines[i]) &&
+           !/^\s*\d+[.)]\s/.test(lines[i]) &&
+           !(lines[i].includes('|') && i + 1 < lines.length && isTableSep(lines[i + 1]))) {
+      buf.push(lines[i].trim());
+      i++;
+    }
+    out.push(`<p>${renderInline(buf.join(' '))}</p>`);
+  }
+
+  return out.join('\n');
+}
+
+// ── 加载并渲染 ?src= 指定的 Markdown 文件 ──
+(async function () {
+  const params = new URLSearchParams(location.search);
+  const src = params.get('src');
+  const box = document.getElementById('content');
+  if (!src) {
+    box.innerHTML = '<div class="error">缺少 src 参数，无法定位报告文件。</div>';
+    return;
+  }
+
+  const rawLink = document.getElementById('rawLink');
+  const dlLink = document.getElementById('downloadLink');
+  rawLink.href = src;
+  dlLink.href = src.replace(/([?&])inline=1&?/, '$1').replace(/[?&]$/, '') || src;
+  document.getElementById('crumb').textContent = '报告预览 · ' + decodeURIComponent(src.split('/').pop().split('?')[0]);
+
+  try {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const md = await res.text();
+    box.innerHTML = renderMarkdown(md);
+  } catch (e) {
+    box.innerHTML = '<div class="error">报告加载失败：' + escapeHtml(String(e.message || e)) + '</div>';
+  }
+})();
+</script>
+</body>
+</html>

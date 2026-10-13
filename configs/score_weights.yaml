@@ -1,0 +1,6 @@
+availability: 0.25
+ttft: 0.20
+decode_tps: 0.20
+throughput: 0.15
+tail_stability: 0.15
+error_rate: 0.05

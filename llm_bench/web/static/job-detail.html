@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>压测任务详情</title>
+<style>
+:root {
+  --bg: #f1f5f9; --card: #fff; --border: #e2e8f0;
+  --text: #1e293b; --text-light: #64748b;
+  --primary: #3b82f6; --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
+a { color: var(--primary); text-decoration: none; }
+.crumbs { font-size: 13px; color: var(--text-light); margin-bottom: 14px; }
+.crumbs a { color: var(--text-light); }
+.head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.head h1 { font-size: 20px; font-weight: 600; }
+.head .sub { color: var(--text-light); font-size: 12px; margin-top: 3px; }
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 20px; overflow: hidden;
+}
+.card-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.card-body { padding: 18px; }
+.badge { display: inline-block; padding: 3px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.badge-ok { background: #dcfce7; color: #16a34a; }
+.badge-stop { background: #f1f5f9; color: #475569; border: 1px solid var(--border); }
+.badge-err { background: #fee2e2; color: #dc2626; }
+.badge-wait { background: #fef3c7; color: #b45309; }
+.badge-mini { padding: 1px 8px; border-radius: 9px; font-size: 11px; font-weight: 500; }
+.bm-ok { background: #dcfce7; color: #16a34a; }
+.bm-fail { background: #fee2e2; color: #dc2626; }
+.bm-pending { background: #f1f5f9; color: #64748b; }
+.muted { color: var(--text-light); font-size: 12px; }
+.btn {
+  padding: 7px 14px; border: none; border-radius: 6px; font-size: 13px;
+  font-weight: 500; cursor: pointer; transition: all .15s; display: inline-block;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #2563eb; }
+.btn-secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: #e2e8f0; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+th { background: #f8fafc; font-weight: 600; color: var(--text-light); font-size: 12px; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: none; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px 24px; }
+.kv .row { display: flex; gap: 8px; font-size: 13px; line-height: 1.7; }
+.kv .k { color: var(--text-light); min-width: 96px; flex-shrink: 0; }
+.kv .v { word-break: break-all; }
+.prompt-box {
+  margin-top: 12px; background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 14px; white-space: pre-wrap;
+  font-size: 13px; line-height: 1.7;
+}
+.raw-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.raw-links a {
+  font-size: 11px; color: var(--text-light); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 7px;
+}
+.raw-links a:hover { background: #f8fafc; color: var(--primary); }
+.err-text { color: var(--danger); font-size: 12px; margin-top: 4px; word-break: break-all; }
+.feishu-results { margin-top: 12px; font-size: 13px; line-height: 2; }
+.feishu-results .ok a { color: #16a34a; }
+.feishu-results .fail { color: var(--danger); }
+.tag-multi { background: #ede9fe; color: #6d28d9; border-radius: 4px; padding: 1px 7px; font-size: 11px; }
+.tag-legacy { background: #f1f5f9; color: #64748b; border-radius: 4px; padding: 1px 7px; font-size: 11px; }
+#toast {
+  position: fixed; top: 20px; right: 20px; z-index: 1000; display: none;
+  padding: 12px 20px; border-radius: 6px; color: #fff; font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+#toast.success { background: var(--success); }
+#toast.error { background: var(--danger); }
+#jobReportTable tfoot td { background: #f8fafc; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumbs"><a href="/">← 返回压测台</a> / 历史记录 / <span id="crumbId"></span></div>
+
+  <div class="head">
+    <div>
+      <h1 id="title">压测任务详情</h1>
+      <div class="sub" id="subtitle"></div>
+    </div>
+    <span id="stageBadge" class="badge"></span>
+  </div>
+
+  <!-- 任务级报告 -->
+  <div class="card">
+    <div class="card-header">
+      <span>任务级报告</span>
+      <span id="jobKindTag"></span>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <table id="jobReportTable">
+        <thead>
+          <tr>
+            <th style="width:40%">报告文件</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="jobReportBody"></tbody>
+        <tfoot id="jobReportFoot"></tfoot>
+      </table>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      <div class="feishu-results" id="feishuResults"></div>
+    </div>
+  </div>
+
+  <!-- 压测参数 -->
+  <div class="card">
+    <div class="card-header">压测参数</div>
+    <div class="card-body">
+      <div class="kv" id="paramList"></div>
+      <div id="promptBox"></div>
+    </div>
+  </div>
+
+  <!-- 各模型结果 -->
+  <div class="card">
+    <div class="card-header">各模型结果</div>
+    <div class="card-body" style="padding:0;">
+      <table>
+        <thead><tr>
+          <th>供应商/模型</th><th>状态</th>
+          <th class="num">请求</th><th class="num">成功</th><th class="num">失败</th>
+          <th class="num">成功率</th><th class="num">TTFT p50</th><th class="num">E2E p50</th>
+          <th class="num">RPM</th><th>报告与数据</th>
+        </tr></thead>
+        <tbody id="targetBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const JOB_ID = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+let detail = null;
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+function fmt(v) { if (v == null || isNaN(v)) return '-'; return v >= 100 ? Math.round(v) : v.toFixed(1); }
+function pct(v) { return v == null ? '-' : (v * 100).toFixed(1) + '%'; }
+function ms(v) { return v == null ? '-' : (v * 1000).toFixed(0) + ' ms'; }
+function fmtTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? esc(iso) : d.toLocaleString();
+}
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type || 'success';
+  t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 3500);
+}
+
+// 任务目录内文件的访问 URL
+function dlUrl(rel, inline) {
+  return '/api/results/' + encodeURIComponent(JOB_ID) + '/download/'
+    + rel.split('/').map(encodeURIComponent).join('/') + (inline ? '?inline=1' : '');
+}
+function viewerUrl(rel) {
+  return '/viewer?src=' + encodeURIComponent(dlUrl(rel, true));
+}
+
+const STAGE_META = {
+  finished: { cls: 'badge-ok', text: '已完成' },
+  stopped: { cls: 'badge-stop', text: '已停止' },
+  error: { cls: 'badge-err', text: '执行异常' },
+  starting: { cls: 'badge-wait', text: '进行中/未正常收口' },
+};
+
+async function load() {
+  document.getElementById('crumbId').textContent = JOB_ID;
+  const res = await fetch('/api/results/' + encodeURIComponent(JOB_ID) + '/detail');
+  if (!res.ok) {
+    document.getElementById('subtitle').textContent = '任务不存在或已被删除';
+    return;
+  }
+  detail = await res.json();
+  render();
+}
+
+function render() {
+  const meta = STAGE_META[detail.stage] || { cls: 'badge-stop', text: detail.stage };
+  const badge = document.getElementById('stageBadge');
+  badge.className = 'badge ' + meta.cls;
+  badge.textContent = meta.text;
+
+  document.getElementById('jobKindTag').innerHTML =
+    detail.kind === 'legacy' ? '<span class="tag-legacy">旧版单模型结果</span>'
+    : detail.multi_model ? '<span class="tag-multi">多模型对比</span>' : '<span class="tag-legacy">单模型</span>';
+
+  const names = detail.targets.map(t => esc(t.provider) + ' / ' + esc(t.model)).join('、');
+  document.getElementById('subtitle').textContent =
+    names + '　开始 ' + fmtTime(detail.started_at) + '　结束 ' + fmtTime(detail.ended_at);
+
+  renderJobActions();
+  renderParams();
+  renderTargets();
+
+  if (detail.error) {
+    const card = document.querySelector('.card .card-body');
+  }
+}
+
+function renderJobActions() {
+  const a = detail.artifacts;
+  // 定义所有可能的任务级报告
+  const reports = [
+    { key: 'page', file: 'report.html', icon: '📄', label: '页面快照', desc: 'HTML 交互式报告' },
+    { key: 'analysis', file: 'analysis.md', icon: '📊', label: '对比分析', desc: 'Markdown 对比分析文档' },
+    { key: 'compare_md', file: 'compare.md', icon: '📋', label: '对比表', desc: 'Markdown 对比表格' },
+  ];
+
+  const rows = [];
+  reports.forEach(r => {
+    if (!a[r.key]) return;
+    const actions = [];
+    // 查看按钮
+    if (r.file.endsWith('.html')) {
+      actions.push('<a class="btn btn-secondary btn-sm" target="_blank" href="' + dlUrl(r.file, true) + '">查看</a>');
+    } else {
+      actions.push('<a class="btn btn-secondary btn-sm" target="_blank" href="' + viewerUrl(r.file) + '">查看</a>');
+    }
+    // 下载按钮
+    actions.push('<a class="btn btn-secondary btn-sm" href="' + dlUrl(r.file, false) + '">下载</a>');
+    // 飞书导出按钮（仅 Markdown 文件支持）
+    if (r.file.endsWith('.md')) {
+      actions.push('<button class="btn btn-secondary btn-sm" onclick="feishu(\'' + r.file.replace(/'/g, "\\'") + '\')">飞书导出</button>');
+    }
+
+    rows.push('<tr>'
+      + '<td><strong>' + r.icon + ' ' + esc(r.file) + '</strong>'
+      + '<div class="muted" style="margin-top:2px;">' + esc(r.desc) + '</div></td>'
+      + '<td><div class="btn-group">' + actions.join('') + '</div></td>'
+      + '</tr>');
+  });
+
+  const tbody = document.getElementById('jobReportBody');
+  const tfoot = document.getElementById('jobReportFoot');
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="2" class="muted" style="text-align:center;padding:24px;">该任务没有生成任何报告</td></tr>';
+    tfoot.innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = rows.join('');
+
+  // 底部操作栏：打包下载 + 飞书一键导出
+  const footActions = [];
+  footActions.push('<a class="btn btn-secondary btn-sm" href="/api/results/' + encodeURIComponent(JOB_ID) + '/zip">⬇️ 打包下载全部</a>');
+  if (detail.multi_model) {
+    footActions.push('<button class="btn btn-primary btn-sm" onclick="feishuAll()">🚀 飞书一键导出全部</button>');
+  }
+  tfoot.innerHTML = '<tr><td colspan="2" style="padding:14px 12px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+    + footActions.join('')
+    + '</div></td></tr>';
+}
+
+function renderParams() {
+  const cfg = detail.config || {};
+  const rows = [];
+  const add = (k, v) => rows.push(
+    '<div class="row"><span class="k">' + k + '</span><span class="v">' + esc(v) + '</span></div>');
+  add('目标数', detail.targets.length);
+  if (cfg.api_style) add('请求协议', cfg.api_style);
+  if (cfg.concurrency != null)
+    add('并发数', Array.isArray(cfg.concurrency) ? cfg.concurrency.join(',') : cfg.concurrency);
+  if (cfg.prompt) add('Prompt 档位', cfg.prompt);
+  if (cfg.max_tokens != null) add('max_tokens', cfg.max_tokens);
+  if (cfg.duration != null) add('压测时长', cfg.duration + ' s');
+  if (cfg.requests != null) add('请求总数', cfg.requests);
+  if (cfg.timeout != null) add('超时', cfg.timeout + ' s');
+  if (cfg.retry != null) add('重试次数', cfg.retry);
+  if (cfg.wait_time != null) add('请求间隔', cfg.wait_time + ' s');
+  if (cfg.warmup != null) add('预热次数', cfg.warmup);
+  if (cfg.cache_mode) add('缓存模式', cfg.cache_mode);
+  if (cfg.cache_warmup != null) add('缓存预热次数', cfg.cache_warmup);
+  add('流式输出', cfg.stream ? '是' : (detail.kind === 'job' ? '否' : '-'));
+  if (cfg.chunk_timeline != null) add('chunk 时间线', cfg.chunk_timeline ? '是' : '否');
+  // 深度思考开关
+  if (cfg.enable_thinking != null) add('深度思考', cfg.enable_thinking ? '开' : '关');
+  document.getElementById('paramList').innerHTML = rows.join('');
+  // 仅当 prompt 档位为 custom 时才显示自定义提示词
+  if (cfg.custom_prompt && cfg.prompt === 'custom') {
+    document.getElementById('promptBox').innerHTML =
+      '<div class="muted" style="margin-bottom:6px;">自定义提示词：</div>'
+      + '<div class="prompt-box">' + esc(cfg.custom_prompt) + '</div>';
+  }
+}
+
+function targetReportRel(t) {
+  return t.dir ? t.dir + '/report.md' : 'report.md';
+}
+
+function renderTargets() {
+  const body = document.getElementById('targetBody');
+  body.innerHTML = detail.targets.map((t, i) => {
+    const av = (t.summary && t.summary.availability) || {};
+    const rel = targetReportRel(t);
+    const hasMd = !!t.files['report.md'];
+    const badge = t.status === 'ok'
+      ? '<span class="badge-mini bm-ok">成功</span>'
+      : (t.status === 'pending'
+        ? '<span class="badge-mini bm-pending">未完成</span>'
+        : '<span class="badge-mini bm-fail">失败</span>');
+    const actions = [];
+    if (hasMd) {
+      actions.push('<a class="btn btn-secondary btn-sm" target="_blank" href="' + viewerUrl(rel) + '">MD 查看</a>');
+      actions.push('<a class="btn btn-secondary btn-sm" href="' + dlUrl(rel, false) + '">MD 下载</a>');
+      actions.push('<button class="btn btn-secondary btn-sm" onclick="feishuTarget(' + i + ', \'' + rel.replace(/'/g, "\\'") + '\')">飞书</button>');
+    }
+    const raw = ['requests.csv', 'timeseries.csv', 'chunks.csv', 'summary.json', 'config.json', 'benchmark.log']
+      .filter(name => t.files[name])
+      .map(name => '<a target="_blank" href="' + dlUrl((t.dir ? t.dir + '/' : '') + name, true) + '">' + name + '</a>')
+      .join('');
+    return '<tr>'
+      + '<td><strong>' + esc(t.provider) + ' / ' + esc(t.model) + '</strong>'
+      + (t.dir ? '<div class="muted" style="margin-top:2px;">' + esc(t.dir) + '</div>' : '') + '</td>'
+      + '<td>' + badge + (t.error ? '<div class="err-text">' + esc(t.error) + '</div>' : '') + '</td>'
+      + '<td class="num">' + (av.total != null ? av.total : '-') + '</td>'
+      + '<td class="num">' + (av.success != null ? av.success : '-') + '</td>'
+      + '<td class="num">' + (av.failed != null ? av.failed : '-') + '</td>'
+      + '<td class="num">' + pct(av.success_rate) + '</td>'
+      + '<td class="num">' + ms(t.summary && t.summary.ttft && t.summary.ttft.p50) + '</td>'
+      + '<td class="num">' + ms(t.summary && t.summary.e2e && t.summary.e2e.p50) + '</td>'
+      + '<td class="num">' + fmt(t.summary && t.summary.throughput && t.summary.throughput.rpm) + '</td>'
+      + '<td><div class="btn-group">' + actions.join('') + '</div>'
+      + '<div class="feishu-results" id="targetFeishu_' + i + '"></div>'
+      + (raw ? '<div class="raw-links">' + raw + '</div>' : '') + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+async function feishu(relPath) {
+  try {
+    toast('正在导出飞书...', 'success');
+    const res = await fetch('/api/results/' + encodeURIComponent(JOB_ID) + '/feishu', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: relPath }),
+    });
+    const data = await res.json();
+    const box = document.getElementById('feishuResults');
+    if (data.url) {
+      toast('飞书导出成功');
+      box.insertAdjacentHTML('beforeend',
+        '<div class="ok">✅ ' + esc(relPath) + ' → <a target="_blank" href="' + encodeURI(data.url) + '">打开文档</a></div>');
+    } else {
+      toast(data.error || '导出失败', 'error');
+      box.insertAdjacentHTML('beforeend',
+        '<div class="fail">❌ ' + esc(relPath) + '：' + esc(data.error || '失败') + '</div>');
+    }
+  } catch (err) {
+    console.error('飞书导出失败:', err);
+    toast('导出失败：' + err.message, 'error');
+  }
+}
+
+async function feishuTarget(targetIndex, relPath) {
+  try {
+    toast('正在导出飞书...', 'success');
+    const res = await fetch('/api/results/' + encodeURIComponent(JOB_ID) + '/feishu', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: relPath }),
+    });
+    const data = await res.json();
+    const box = document.getElementById('targetFeishu_' + targetIndex);
+    if (data.url) {
+      toast('飞书导出成功');
+      box.insertAdjacentHTML('beforeend',
+        '<div class="ok">✅ <a target="_blank" href="' + encodeURI(data.url) + '">打开文档</a></div>');
+    } else {
+      toast(data.error || '导出失败', 'error');
+      box.insertAdjacentHTML('beforeend',
+        '<div class="fail">❌ ' + esc(data.error || '失败') + '</div>');
+    }
+  } catch (err) {
+    console.error('飞书导出失败:', err);
+    toast('导出失败：' + err.message, 'error');
+  }
+}
+
+async function feishuAll() {
+  toast('正在批量导出飞书...', 'success');
+  const res = await fetch('/api/results/' + encodeURIComponent(JOB_ID) + '/feishu-all', { method: 'POST' });
+  const data = await res.json();
+  const box = document.getElementById('feishuResults');
+  (data.results || []).forEach(r => {
+    if (r.ok && r.url) {
+      box.insertAdjacentHTML('beforeend',
+        '<div class="ok">✅ ' + esc(r.path) + ' → <a target="_blank" href="' + encodeURI(r.url) + '">打开文档</a></div>');
+    } else {
+      box.insertAdjacentHTML('beforeend',
+        '<div class="fail">❌ ' + esc(r.path) + '：' + esc(r.error || '失败') + '</div>');
+    }
+  });
+  toast('飞书批量导出完成');
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+httpx>=0.27
+PyYAML>=6.0
+# Web UI (optional, for `llm-bench web` command)
+fastapi>=0.104
+uvicorn>=0.24
+websockets>=12.0
+# 注释保留型 YAML 读写（Web 配置编辑时保留注释）
+ruamel.yaml>=0.18

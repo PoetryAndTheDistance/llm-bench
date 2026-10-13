@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llm-bench Web UI</title>
+<style>
+:root {
+  --sidebar-bg: #1e293b;
+  --sidebar-hover: #334155;
+  --sidebar-active: #3b82f6;
+  --bg: #f1f5f9;
+  --card: #fff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-light: #64748b;
+  --primary: #3b82f6;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── 左侧菜单 ── */
+.sidebar {
+  width: 220px;
+  background: var(--sidebar-bg);
+  color: #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.sidebar-logo {
+  padding: 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  border-bottom: 1px solid #334155;
+}
+.sidebar-group-title {
+  padding: 16px 20px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+}
+.sidebar-item {
+  padding: 11px 20px 11px 32px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+  border-left: 3px solid transparent;
+}
+.sidebar-item:hover { background: var(--sidebar-hover); color: #fff; }
+.sidebar-item.active {
+  background: var(--sidebar-hover);
+  color: #fff;
+  border-left-color: var(--primary);
+}
+.sidebar-item.top { padding-left: 20px; font-weight: 500; }
+.sidebar-status {
+  margin-top: auto;
+  padding: 16px 20px;
+  font-size: 12px;
+  border-top: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+.status-dot.running { background: var(--success); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* ── 主内容区 ── */
+.main { flex: 1; padding: 24px; overflow-y: auto; max-height: 100vh; }
+.page { display: none; }
+.page.active { display: block; }
+.page-title { font-size: 22px; font-weight: 600; margin-bottom: 20px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-body { padding: 18px; }
+
+/* ── 表单 ── */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.form-field { display: flex; flex-direction: column; gap: 6px; }
+.form-field.full { grid-column: 1 / -1; }
+.form-field label { font-size: 12px; color: var(--text-light); font-weight: 500; }
+.form-field input, .form-field select, .form-field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59,130,246,.1);
+}
+.radio-group { display: flex; gap: 16px; padding-top: 6px; }
+.radio-group label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+
+/* ── 按钮 ── */
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #2563eb; }
+.btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+.btn-secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: #e2e8f0; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-danger:disabled { background: #fca5a5; cursor: not-allowed; }
+/* 通用禁用态：所有变体置灰并屏蔽点击/悬停效果 */
+.btn:disabled, .btn[disabled] { opacity: .6; cursor: not-allowed; pointer-events: none; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── 表格 ── */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: #f8fafc; font-weight: 600; color: var(--text-light); font-size: 12px; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafbfc; }
+
+/* ── Tabs（压测页内指标切换）── */
+.subtabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 16px; }
+.subtab {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-light);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+.subtab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.subtab-content { display: none; }
+.subtab-content.active { display: block; }
+
+/* 趋势图（.trend-*）样式由公共组件 trend-chart.js 注入，与离线快照共用一份 */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.badge-running { background: #dcfce7; color: #16a34a; }
+.badge-idle { background: #f1f5f9; color: #64748b; }
+.badge-ok { background: #dcfce7; color: #16a34a; }
+.badge-err { background: #fee2e2; color: #dc2626; }
+.muted { color: var(--text-light); font-size: 12px; }
+.toast {
+  position: fixed; top: 20px; right: 20px; z-index: 1000;
+  padding: 12px 20px; border-radius: 6px; color: #fff; font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15); display: none;
+  max-width: min(560px, 90vw); max-height: 60vh; overflow: auto;
+  white-space: pre-wrap; word-break: break-all; line-height: 1.6;
+}
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+.checkbox-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.checkbox-list label {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border);
+}
+.checkbox-list label:hover { background: #f8fafc; }
+
+/* ── 供应商折叠分组（创建压测任务选目标）── */
+.provider-group { border-bottom: 1px solid var(--border); }
+.provider-group:last-child { border-bottom: none; }
+.provider-group-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; background: #f8fafc; font-size: 13px;
+  position: sticky; top: 0; z-index: 1;
+}
+.provider-group-header .pg-toggle {
+  display: inline-block; width: 16px; color: var(--text-light);
+  cursor: pointer; user-select: none; transition: transform .15s; font-size: 10px;
+}
+.provider-group.collapsed .pg-toggle { transform: rotate(-90deg); }
+.provider-group-header .pg-head-label {
+  display: flex; align-items: center; gap: 8px; flex: 1;
+  cursor: pointer; font-weight: 600; margin: 0; padding: 0; border: none;
+}
+.provider-group-header .pg-head-label:hover { background: none; }
+.provider-group-header .pg-count { font-weight: 400; font-size: 12px; }
+.provider-group-body { padding: 2px 0; }
+.provider-group.collapsed .provider-group-body { display: none; }
+.provider-group-body label {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 34px; font-size: 13px; cursor: pointer;
+}
+.provider-group-body label:hover { background: #f8fafc; }
+.provider-group-body .pg-empty { padding: 6px 12px 6px 34px; font-size: 12px; }
+
+/* 首请求校验（.fe-*）样式由公共组件 first-exchange.js 注入，与离线快照共用一份 */
+</style>
+</head>
+<body>
+
+<!-- 左侧菜单 -->
+<div class="sidebar">
+  <div class="sidebar-logo">🔬 llm-bench</div>
+  <div class="sidebar-group-title">配置</div>
+  <div class="sidebar-item" data-page="feishu" onclick="switchPage('feishu', this)">飞书配置</div>
+  <div class="sidebar-item" data-page="models" onclick="switchPage('models', this)">模型配置</div>
+  <div class="sidebar-group-title"></div>
+  <div class="sidebar-item top active" data-page="benchmark" onclick="switchPage('benchmark', this)">🚀 压测</div>
+  <div class="sidebar-item top" data-page="history" onclick="switchPage('history', this)">📜 历史记录</div>
+  <div class="sidebar-status">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">未连接</span>
+  </div>
+</div>
+
+<!-- 主内容 -->
+<div class="main">
+
+  <!-- ═══════ 压测页 ═══════ -->
+  <div class="page active" id="page-benchmark">
+    <div class="page-title">压测</div>
+
+    <!-- 任务状态条 -->
+    <div class="card">
+      <div class="card-header">
+        当前任务
+        <span id="jobBadge" class="badge badge-idle">空闲</span>
+      </div>
+      <div class="card-body" id="jobInfo">
+        <span class="muted">当前没有运行中的任务，可在下方创建新任务</span>
+      </div>
+    </div>
+
+    <!-- 创建任务 -->
+    <div class="card">
+      <div class="card-header">创建压测任务</div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="form-field full">
+            <label>选择供应商 / 模型（可多选，任务内并发执行）</label>
+            <div class="checkbox-list" id="targetList">
+              <span class="muted" style="padding:12px;display:block;">加载中...</span>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label>请求协议</label>
+            <select id="cfgApiStyle">
+              <option value="openai">OpenAI 兼容（/v1/chat/completions）</option>
+              <option value="anthropic">Anthropic（/v1/messages）</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label>Prompt 档位</label>
+            <select id="cfgPrompt" onchange="toggleCustomPrompt()">
+              <option value="short">short (100 tokens)</option>
+              <option value="medium" selected>medium (1K tokens)</option>
+              <option value="long">long (8K tokens)</option>
+              <option value="very_long">very_long (32K tokens)</option>
+              <option value="990k">990k (990K tokens)</option>
+              <option value="1m">1m (1M tokens)</option>
+              <option value="custom">custom (自定义)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>max_tokens（设为 1 可测首响延迟）</label>
+            <input type="number" id="cfgMaxTokens" value="500" min="1">
+            <div id="maxTokensHint" class="muted" style="font-size:12px;margin-top:4px;line-height:1.4;">快捷提示词下，该数值即模型的真实输出数量（提示词内置等量输出指令）</div>
+          </div>
+          <div class="form-field">
+            <label>并发数（逗号分隔多值，如 1,5,10）</label>
+            <input type="text" id="cfgConcurrency" value="1">
+          </div>
+          <div class="form-field">
+            <label>请求间隔 wait_time（秒，0=连续）</label>
+            <input type="number" id="cfgWaitTime" value="0" min="0" step="0.1">
+          </div>
+        </div>
+
+        <div class="form-field full" id="customPromptField" style="display:none; margin-top:16px;">
+          <label>自定义提示词</label>
+          <textarea id="cfgCustomPrompt" rows="3" placeholder="输入自定义提示词..."></textarea>
+        </div>
+
+        <div style="margin-top:16px;">
+          <label class="muted" style="font-weight:500;">压测模式（二选一）</label>
+          <div class="radio-group">
+            <label><input type="radio" name="budget" value="duration" checked onchange="toggleBudget()"> 按时长</label>
+            <label><input type="radio" name="budget" value="requests" onchange="toggleBudget()"> 按请求数</label>
+          </div>
+          <div class="form-grid" style="margin-top:12px;">
+            <div class="form-field" id="durationField">
+              <label>压测时长（秒）</label>
+              <input type="number" id="cfgDuration" value="60" min="1">
+            </div>
+            <div class="form-field" id="requestsField" style="display:none;">
+              <label>请求总数（所有模型合计，自动均分到各模型）</label>
+              <input type="number" id="cfgRequests" value="10" min="1">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-grid" style="margin-top:16px;">
+          <div class="form-field">
+            <label>缓存模式</label>
+            <select id="cfgCacheMode" onchange="toggleCacheMode()">
+              <option value="record">record（只记录，不预热缓存）</option>
+              <option value="warmup">warmup（先做缓存预热）</option>
+            </select>
+            <div class="muted" style="font-size:12px;margin-top:4px;line-height:1.4;">提示：输入需大于 1024 tokens 才会触发模型缓存机制</div>
+          </div>
+          <div class="form-field" id="cacheWarmupField" style="display:none;">
+            <label>缓存预热次数 cache_warmup（单并发，仅 warmup 模式生效）</label>
+            <input type="number" id="cfgCacheWarmup" value="3" min="0">
+          </div>
+          <div class="form-field">
+            <label>预热次数 warmup（正式压测前的普通预热）</label>
+            <input type="number" id="cfgWarmup" value="10" min="0">
+          </div>
+          <div class="form-field">
+            <label>超时 timeout（秒）</label>
+            <input type="number" id="cfgTimeout" value="120" min="1">
+          </div>
+          <div class="form-field">
+            <label>重试次数 retry</label>
+            <input type="number" id="cfgRetry" value="1" min="0">
+          </div>
+          <div class="form-field">
+            <label style="margin-top:22px;"><input type="checkbox" id="cfgStream" checked> 流式输出</label>
+          </div>
+          <div class="form-field">
+            <label style="margin-top:22px;" title="开启后自动兼容多套参数：OpenAI 兼容协议同时下发 enable_thinking=true 与 thinking.type=enabled；Anthropic 协议下发原生 thinking.budget_tokens。关闭时同理双发关闭参数，被网关拒绝时自动剥离重试"><input type="checkbox" id="cfgEnableThinking"> 深度思考（自动兼容 enable_thinking / thinking）</label>
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-top:20px;">
+          <button class="btn btn-primary" id="btnStart" onclick="startJob()">▶️ 开始压测</button>
+          <button class="btn btn-danger" id="btnStop" onclick="stopJob()" disabled>⏹️ 停止</button>
+          <span id="jobStage" style="align-self:center;font-size:13px;font-weight:600;"></span>
+        </div>
+        <div id="jobProgressWrap" style="display:none;margin-top:10px;">
+          <div style="background:#e2e8f0;border-radius:6px;height:14px;overflow:hidden;">
+            <div id="jobProgressBar" style="background:var(--primary);height:100%;width:0%;transition:width .3s;"></div>
+          </div>
+          <div id="jobProgressText" class="muted" style="font-size:12px;margin-top:4px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 首请求校验：每个模型首个请求的完整请求/返回 Body -->
+    <div class="card" id="firstExchangeCard">
+      <div class="card-header">
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="fe-card-toggle">▶</span>
+          <span>首请求校验</span>
+          <span class="muted" style="font-weight:400;font-size:12px;">
+            各模型首个请求的完整请求 / 返回 Body，用于核对请求参数与返回内容（不含请求头与 API Key）
+          </span>
+        </span>
+        <span id="firstExchangeCount" class="fe-badge fe-badge-idle">0</span>
+      </div>
+      <div class="card-body collapsed" id="firstExchangeBody">
+        <div id="firstExchangeList" class="muted" style="font-size:13px;">
+          任务启动后，将在此按模型展示首个请求（缓存预热 / 预热 / 正式压测中取最早一次），点击模型行展开
+        </div>
+      </div>
+    </div>
+
+    <!-- 实时指标 -->
+    <div class="card">
+      <div class="card-header">实时指标</div>
+      <div class="card-body">
+        <div class="subtabs">
+          <div class="subtab active" onclick="switchSubtab('latency', this)">延迟指标</div>
+          <div class="subtab" onclick="switchSubtab('throughput', this)">吞吐指标</div>
+          <div class="subtab" onclick="switchSubtab('tokens', this)">Token 消耗</div>
+        </div>
+
+        <div class="subtab-content active" id="subtab-latency">
+          <table>
+            <thead><tr>
+              <th>供应商/模型</th><th class="num">请求数</th><th class="num">成功率</th>
+              <th class="num">TTFT p50</th><th class="num">TTFT p95</th><th class="num">TTFT p99</th>
+              <th class="num">E2E p50</th><th class="num">E2E p95</th>
+            </tr></thead>
+            <tbody id="latencyBody"><tr><td colspan="8" class="muted">等待数据...</td></tr></tbody>
+          </table>
+          <div class="trend-legend" id="latencyLegend"></div>
+          <div class="trend-panel">
+            <div class="trend-title">TTFT 趋势<span class="unit">首 token 延迟 p50 · ms</span></div>
+            <div class="trend-surface" id="ttftChart"></div>
+          </div>
+          <div class="trend-panel">
+            <div class="trend-title">E2E 趋势<span class="unit">端到端延迟 p50 · ms</span></div>
+            <div class="trend-surface" id="e2eChart"></div>
+          </div>
+        </div>
+
+        <div class="subtab-content" id="subtab-throughput">
+          <table>
+            <thead><tr>
+              <th>供应商/模型</th><th class="num">请求数</th><th class="num">成功率</th><th class="num">RPM</th>
+              <th class="num">Decode p50</th><th class="num">Prefill p50</th><th class="num">Eff p50</th>
+              <th class="num">Input TPM</th><th class="num">Output TPM</th>
+            </tr></thead>
+            <tbody id="tpsBody"><tr><td colspan="9" class="muted">等待数据...</td></tr></tbody>
+          </table>
+          <div class="trend-legend" id="throughputLegend"></div>
+          <div class="trend-panel">
+            <div class="trend-title">RPM 趋势<span class="unit">每分钟请求数</span></div>
+            <div class="trend-surface" id="rpmChart"></div>
+          </div>
+          <div class="trend-panel">
+            <div class="trend-title">Decode TPS 趋势<span class="unit">解码吞吐 p50 · tokens/s</span></div>
+            <div class="trend-surface" id="decodeChart"></div>
+          </div>
+          <div class="trend-panel">
+            <div class="trend-title">Prefill TPS 趋势<span class="unit">预填充吞吐 p50 · tokens/s</span></div>
+            <div class="trend-surface" id="prefillChart"></div>
+          </div>
+          <div class="trend-panel">
+            <div class="trend-title">Eff TPS 趋势<span class="unit">有效吞吐 p50 · tokens/s</span></div>
+            <div class="trend-surface" id="effChart"></div>
+          </div>
+          <div class="trend-panel">
+            <div class="trend-title">Input TPM 趋势<span class="unit">输入 token 吞吐 · tokens/min</span></div>
+            <div class="trend-surface" id="inputTpmChart"></div>
+          </div>
+          <div class="trend-panel">
+            <div class="trend-title">Output TPM 趋势<span class="unit">输出 token 吞吐 · tokens/min</span></div>
+            <div class="trend-surface" id="outputTpmChart"></div>
+          </div>
+        </div>
+
+        <div class="subtab-content" id="subtab-tokens">
+          <table>
+            <thead><tr>
+              <th>供应商/模型</th><th class="num">请求数</th><th class="num">成功</th><th class="num">输入</th>
+              <th class="num">输出</th><th class="num">缓存创建 L1</th>
+              <th class="num">缓存命中 L2</th><th class="num">请求缓存命中率</th><th class="num">总计</th>
+            </tr></thead>
+            <tbody id="tokenBody"><tr><td colspan="9" class="muted">等待数据...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ 历史记录页 ═══════ -->
+  <div class="page" id="page-history">
+    <div class="page-title">历史记录</div>
+    <div class="card">
+      <div class="card-header">
+        历史压测任务
+        <span class="muted">一次压测任务一行；多模型对比在任务详情内查看</span>
+      </div>
+      <div class="card-body">
+        <table>
+          <thead><tr>
+            <th>时间</th><th>目标</th><th class="num">请求</th><th class="num">成功</th>
+            <th class="num">失败</th><th>状态</th><th>操作</th>
+          </tr></thead>
+          <tbody id="historyBody"><tr><td colspan="7" class="muted">加载中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ 模型配置页 ═══════ -->
+  <div class="page" id="page-models">
+    <div class="page-title">模型配置</div>
+    <div class="card">
+      <div class="card-header">
+        已配置的供应商和模型
+        <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 新增供应商</button>
+      </div>
+      <div class="card-body" id="providersList">加载中...</div>
+    </div>
+  </div>
+
+  <!-- ═══════ 飞书配置页 ═══════ -->
+  <div class="page" id="page-feishu">
+    <div class="page-title">飞书配置</div>
+    <div class="card">
+      <div class="card-header">飞书 Open API 集成</div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="form-field full">
+            <label style="margin-bottom:8px;"><input type="checkbox" id="fsEnabled"> 启用飞书报告导出</label>
+          </div>
+          <div class="form-field">
+            <label>App ID</label>
+            <input type="text" id="fsAppId" placeholder="cli_xxxxxxxx">
+          </div>
+          <div class="form-field">
+            <label>App Secret</label>
+            <input type="password" id="fsAppSecret" placeholder="飞书应用密钥">
+          </div>
+          <div class="form-field">
+            <label>文件夹 Token（可选，留空保存到根目录）</label>
+            <input type="text" id="fsFolder" placeholder="文件夹 token">
+          </div>
+          <div class="form-field full">
+            <label>文档标题模板</label>
+            <input type="text" id="fsTitle" value="llm-bench 压测报告 - {provider}/{model} - {date}">
+          </div>
+        </div>
+        <div class="muted" style="margin-top:12px;line-height:1.8;">
+          获取方式：访问 https://open.feishu.cn/app 创建企业自建应用，<br>
+          在「凭证与基础信息」获取 App ID / App Secret，并在「权限管理」添加 docx:document 和 drive:drive 权限。
+        </div>
+        <div class="btn-group" style="margin-top:16px;">
+          <button class="btn btn-primary" onclick="saveFeishu()">💾 保存配置</button>
+          <button class="btn btn-secondary" id="btnTestFeishu" onclick="testFeishu()">🔌 测试连接（创建 demo 文档）</button>
+          <span id="fsStatus" style="align-self:center;font-size:13px;flex:1;white-space:pre-wrap;word-break:break-all;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 供应商弹窗 -->
+<div id="providerModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center;">
+  <div class="card" style="width:580px;margin:20px;">
+    <div class="card-header" id="providerModalTitle">新增供应商</div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="form-field full">
+          <label>名称</label>
+          <input type="text" id="pvName" placeholder="如 my_provider">
+        </div>
+        <div class="form-field full">
+          <label>Base URL（根域名，自动拼接 /v1/...）</label>
+          <input type="text" id="pvBaseUrl" placeholder="https://api.example.com">
+        </div>
+        <div class="form-field full">
+          <label>API Key</label>
+          <input type="password" id="pvApiKey" placeholder="sk-...">
+        </div>
+        <div class="form-field full">
+          <label>模型</label>
+          <div class="btn-group" style="gap:8px;">
+            <select id="pvModelSelect" style="flex:1;min-width:0;"></select>
+            <button type="button" class="btn btn-secondary" onclick="toggleAddModelRow()">➕ 添加</button>
+            <button type="button" class="btn btn-secondary" onclick="removeSelectedModel()">🗑 删除</button>
+          </div>
+          <div id="pvAddRow" class="btn-group" style="display:none;margin-top:8px;gap:8px;">
+            <input type="text" id="pvNewModel" style="flex:1;min-width:0;" placeholder="输入模型名称，回车或点确认加入下拉框">
+            <button type="button" class="btn btn-primary" onclick="confirmAddModel()">确认</button>
+            <button type="button" class="btn btn-secondary" onclick="toggleAddModelRow(false)">取消</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-field" style="margin-top:12px;">
+        <label>测试 / 拉取使用的请求协议</label>
+        <select id="pvStyle">
+          <option value="openai">OpenAI 兼容（/v1/models、/v1/chat/completions）</option>
+          <option value="anthropic">Anthropic（/v1/messages，不支持自动拉取模型）</option>
+        </select>
+      </div>
+      <div class="btn-group" style="margin-top:16px;">
+        <button type="button" class="btn btn-secondary" onclick="fetchModels()">🔄 拉取模型列表</button>
+        <button type="button" class="btn btn-secondary" onclick="testConnection()">🔌 测试连接（用选中模型发「你好」）</button>
+        <span id="pvMsg" style="align-self:center;font-size:12px;flex:1;white-space:pre-wrap;word-break:break-all;"></span>
+      </div>
+      <div class="btn-group" style="margin-top:20px;justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeProviderModal()">取消</button>
+        <button type="button" class="btn btn-primary" onclick="saveProvider()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 拉取模型结果弹窗（勾选后加入模型下拉框） -->
+<div id="fetchModelsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;">
+  <div class="card" style="width:480px;margin:20px;">
+    <div class="card-header">拉取到的模型</div>
+    <div class="card-body">
+      <div class="btn-group" style="margin-bottom:8px;gap:12px;font-size:13px;">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="fmCheckAll" onchange="toggleFetchAll(this.checked)"> 全选</label>
+        <span id="fmSummary" class="muted"></span>
+      </div>
+      <div id="fmList" style="max-height:320px;overflow:auto;border:1px solid var(--border,#e2e8f0);border-radius:6px;padding:8px;"></div>
+      <div class="btn-group" style="margin-top:16px;justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeFetchModelsModal()">关闭</button>
+        <button type="button" class="btn btn-primary" onclick="addFetchedModels()">⬇ 加入模型下拉框</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 公共组件：趋势图 / 首请求校验，与离线页面快照 report.html 共用同一份实现 -->
+<script src="/static/trend-chart.js"></script>
+<script src="/static/first-exchange.js"></script>
+<script>
+let ws = null, reconnectCount = 0, historyData = [], providersData = [];
+const MAX_RECONNECT = 10;
+// 趋势图 / 首请求校验为公共组件（trend-chart.js、first-exchange.js），
+// 与离线页面快照 report.html 共用同一份实现，避免两处界面漂移
+const charts = TrendCharts.create();
+// 趋势历史在前端全程累积：WS 每帧只推新增点（history_delta），
+// 首次打开 / 断线重连时经 /api/job/history 全量回填，曲线覆盖任务全时长
+let chartHistory = [];
+// 3.12: 跟踪当前任务 ID，job_id 变化时强制重置趋势历史
+// 原实现仅在 stage === 'starting' 时重置，但 initial_stage 由配置决定
+// （cache_warmup / warmup / run），大多数场景下 starting 一帧即过，
+// 前端来不及捕获，旧任务的历史点就会混入新任务 → X 轴出现断层。
+let trackedJobId = null;
+// 3.12: 回填代数 — 任务切换时递增，使旧回填响应失效，避免覆盖新任务的空缓存
+let backfillGen = 0;
+
+function mergeHistory(points) {
+  if (!Array.isArray(points) || !points.length) return;
+  const seen = new Set(chartHistory.map(p => p.t));
+  let changed = false;
+  points.forEach(p => {
+    if (!seen.has(p.t)) { chartHistory.push(p); seen.add(p.t); changed = true; }
+  });
+  if (changed) chartHistory.sort((a, b) => a.t - b.t);
+}
+
+async function backfillHistory() {
+  const myGen = ++backfillGen;
+  try {
+    const res = await fetch('/api/job/history');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!Array.isArray(data.history)) return;
+    // 3.12: 回填期间任务已切换 → 丢弃旧数据，防止覆盖新任务的空缓存
+    if (myGen !== backfillGen) return;
+    // 回填途中可能已有增量帧到达：以全量为底合并，再按时间排序，避免丢点
+    const merged = data.history.slice();
+    const seen = new Set(merged.map(p => p.t));
+    chartHistory.forEach(p => { if (!seen.has(p.t)) merged.push(p); });
+    merged.sort((a, b) => a.t - b.t);
+    chartHistory = merged;
+  } catch (_) { /* 回填失败不影响实时增量 */ }
+}
+
+// ── 页面切换 ──
+function switchPage(page, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  if (page === 'history') loadHistory();
+  if (page === 'models') loadProviders();
+  if (page === 'feishu') loadFeishu();
+}
+
+function switchSubtab(name, el) {
+  el.parentElement.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('subtab-' + name).classList.add('active');
+  // 隐藏的页签宽度为 0，切回来时按实际宽度重绘趋势图
+  charts.redraw();
+}
+
+// ── Toast ──
+let toastTimer = null;
+function toast(msg, type = 'success', duration = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type;
+  t.style.display = 'block';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.style.display = 'none', duration);
+}
+
+// ── WebSocket ──
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => {
+    document.getElementById('statusDot').className = 'status-dot';
+    document.getElementById('statusText').textContent = '已连接';
+    reconnectCount = 0;
+    // 页面晚开 / 重连：全量回填任务开始至今的趋势点
+    backfillHistory();
+  };
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'metrics') updateDashboard(d);
+  };
+  ws.onclose = () => {
+    document.getElementById('statusDot').className = 'status-dot';
+    document.getElementById('statusText').textContent = '未连接';
+    if (reconnectCount < MAX_RECONNECT) {
+      reconnectCount++;
+      const delay = Math.min(1000 * Math.pow(2, reconnectCount - 1), 30000);
+      setTimeout(connect, delay);
+    }
+  };
+  ws.onerror = () => ws.close();
+}
+
+// ── 任务结束后：进入任务详情页（任务级页面快照/对比/各模型报告都在里面）──
+function jobReportButton(jobId) {
+  if (!jobId) return '';
+  return '<div style="margin-top:10px;">'
+    + '<a class="btn btn-primary btn-sm" href="/job/' + encodeURIComponent(jobId)
+    + '" target="_blank">📄 查看本次压测报告</a></div>';
+}
+
+function jobReportsHtml(_results, jobId) {
+  return jobReportButton(jobId);
+}
+
+// ── 首请求校验（每个模型首个请求的完整请求/返回 Body）──
+// 渲染/折叠/复制由公共组件 first-exchange.js 负责；实时页每帧只有轻量索引，
+// 展开某个模型时经 HTTP 懒加载完整 body（与离线快照的唯一差异是 resolve 数据源）
+const feStore = { jobId: null };
+const feUi = FirstExchange.mount({
+  resolve(key, dataset) {
+    const url = '/api/job/first-exchange?provider=' + encodeURIComponent(dataset.provider || '')
+      + '&model=' + encodeURIComponent(dataset.model || '');
+    return fetch(url).then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      return data;
+    });
+  },
+});
+
+function syncFirstExchangeJob(jobId) {
+  // 新任务开始：通知公共组件清空上一轮的展开状态与 body 缓存
+  if (jobId && jobId !== feStore.jobId) {
+    feStore.jobId = jobId;
+    feUi.reset();
+  }
+}
+
+function renderFirstExchanges(index) {
+  // 组件内部做计数徽标与索引签名去重（索引未变化时不重建 DOM）
+  feUi.setIndex(index);
+}
+
+// ── 实时数据更新（按 provider/model 分组）──
+function updateDashboard(d) {
+  // 兼容后端：summary / token_stats 现在都是 {key: stats} 分组结构
+  const groups = d.summary || d.token_stats || {};
+  const status = d.status;
+  const running = status === 'running';
+  document.getElementById('statusDot').className = 'status-dot' + (running ? ' running' : '');
+  document.getElementById('btnStop').disabled = !running;
+  document.getElementById('btnStart').disabled = running;
+
+  // 首请求校验：新任务重置留证状态，每帧用轻量索引刷新（完整 body 展开时才拉取）
+  syncFirstExchangeJob(d.job ? d.job.job_id : null);
+  renderFirstExchanges(d.first_exchanges || {});
+
+  // 提前解析 stage 供下方重置判断与状态渲染共用
+  const stage = d.job ? d.job.stage : null;
+
+  // 3.12: 新任务检测 — job_id 变化时强制重置趋势历史与图表状态
+  // 无论当前 stage 是什么（warmup / cache_warmup / run），只要任务 ID 变了，
+  // 说明后端已 reset，旧的历史点全部作废，必须清空。
+  const newJobId = d.job ? d.job.job_id : null;
+  if (newJobId && newJobId !== trackedJobId) {
+    trackedJobId = newJobId;
+    charts.reset();
+    chartHistory = [];
+    backfillGen++;  // 使任何进行中的回填响应失效
+  } else if (!newJobId && trackedJobId && stage === 'idle' && !Object.keys(groups).length) {
+    // 后端 reset 后尚未 init_job：stage='idle' 且无分组，主动清理
+    trackedJobId = null;
+    charts.reset();
+    chartHistory = [];
+    backfillGen++;
+  }
+
+  // 趋势历史增量并入本地全量缓存（首帧/重连的全量由 backfillHistory 负责）
+  mergeHistory(d.history_delta);
+
+  // 任务状态
+  const badge = document.getElementById('jobBadge');
+  const jobInfoEl = document.getElementById('jobInfo');
+  if (running) {
+    badge.className = 'badge badge-running';
+    badge.textContent = '运行中';
+    jobInfoEl.innerHTML =
+      '<span class="muted">正在压测 ' + Object.keys(groups).length + ' 个供应商/模型...</span>';
+  } else if (stage === 'finished' || stage === 'stopped' || stage === 'error') {
+    // 任务结束：后端 status 已变为 idle，需主动把徽标从“运行中”切换到最终状态
+    const finalMeta = {
+      finished: { cls: 'badge badge-ok', text: '已完成' },
+      stopped: { cls: 'badge badge-idle', text: '已停止' },
+      error: { cls: 'badge badge-err', text: '执行异常' },
+    }[stage];
+    badge.className = finalMeta.cls;
+    badge.textContent = finalMeta.text;
+    if (stage === 'error') {
+      jobInfoEl.innerHTML =
+        '<span class="muted">任务执行异常，请查看服务端日志（benchmark.log / 控制台）</span>'
+        + jobReportsHtml(null, d.job && d.job.job_id);
+    } else {
+      const j = d.job || {};
+      const count = (j.target_count != null) ? j.target_count : Object.keys(groups).length;
+      const verb = stage === 'stopped' ? '任务已停止' : '本轮压测已完成';
+      let html = '<span class="muted">' + verb + '：共 ' + count
+        + ' 个供应商/模型，正式请求 ' + (j.done || 0) + ' 次（成功 ' + (j.success || 0)
+        + ' / 失败 ' + (j.failed || 0) + '），可在下方创建新任务</span>';
+      if (j.job_id) {
+        html += jobReportsHtml(null, j.job_id);
+      } else {
+        html += '<div class="muted" style="margin-top:8px;">本次任务没有目标产出报告，详情可查看服务端日志</div>';
+      }
+      jobInfoEl.innerHTML = html;
+    }
+  } else {
+    badge.className = 'badge badge-idle';
+    badge.textContent = '空闲';
+    jobInfoEl.innerHTML = '<span class="muted">当前没有运行中的任务，可在下方创建新任务</span>';
+  }
+
+  const keys = Object.keys(groups);
+  const empty = '<tr><td colspan="9" class="muted">等待数据...</td></tr>';
+
+  if (!keys.length) {
+    // 三张表列数不同：latency 8 列，tps / token 9 列
+    const emptyCols = { latencyBody: 8, tpsBody: 9, tokenBody: 9 };
+    Object.keys(emptyCols).forEach(id =>
+      document.getElementById(id).innerHTML = empty.replace('colspan="9"', `colspan="${emptyCols[id]}"`));
+    // 3.12: 新任务开始（后端历史已 reset）：清空序列注册与本地全量趋势缓存
+    // 主重置逻辑已上移至 job_id 变更检测处；此处仅作为无 job_id 时的兜底
+    if (stage === 'starting' || stage === 'idle') {
+      trackedJobId = null;
+      charts.reset();
+      chartHistory = [];
+      backfillGen++;
+    }
+    charts.update([], chartHistory);
+    return;
+  }
+
+  // 延迟指标：每个 key 一行
+  document.getElementById('latencyBody').innerHTML = keys.map(k => {
+    const g = groups[k];
+    const rate = (g.success_rate * 100).toFixed(0) + '%';
+    return `<tr>
+      <td>${targetName(k, g)}</td>
+      <td class="num">${g.total}</td>
+      <td class="num">${rate}</td>
+      <td class="num">${fmt(g.ttft?.p50 != null ? g.ttft.p50 * 1000 : null)}</td>
+      <td class="num">${fmt(g.ttft?.p95 != null ? g.ttft.p95 * 1000 : null)}</td>
+      <td class="num">${fmt(g.ttft?.p99 != null ? g.ttft.p99 * 1000 : null)}</td>
+      <td class="num">${fmt(g.e2e?.p50 != null ? g.e2e.p50 * 1000 : null)}</td>
+      <td class="num">${fmt(g.e2e?.p95 != null ? g.e2e.p95 * 1000 : null)}</td>
+    </tr>`;
+  }).join('');
+
+  // 吞吐指标：每个 key 一行
+  document.getElementById('tpsBody').innerHTML = keys.map(k => {
+    const g = groups[k];
+    const rate = (g.success_rate * 100).toFixed(0) + '%';
+    return `<tr>
+      <td>${targetName(k, g)}</td>
+      <td class="num">${g.total}</td>
+      <td class="num">${rate}</td>
+      <td class="num">${fmt(g.rpm)}</td>
+      <td class="num">${fmt(g.decode_tps?.p50)}</td>
+      <td class="num">${fmt(g.prefill_tps?.p50)}</td>
+      <td class="num">${fmt(g.effective_tps?.p50)}</td>
+      <td class="num">${num(Math.round(g.input_tpm))}</td>
+      <td class="num">${num(Math.round(g.output_tpm))}</td>
+    </tr>`;
+  }).join('');
+
+  // Token 消耗：每个 key 一行
+  document.getElementById('tokenBody').innerHTML = keys.map(k => {
+    const g = groups[k];
+    return `<tr>
+      <td>${targetName(k, g)}</td>
+      <td class="num">${g.total}</td>
+      <td class="num">${g.success}</td>
+      <td class="num">${num(g.input_tokens)}</td>
+      <td class="num">${num(g.output_tokens)}</td>
+      <td class="num" style="color:#f59e0b">${g.cache_l1_reported ? num(g.cache_l1_tokens) : '<span class="muted">未上报</span>'}</td>
+      <td class="num" style="color:#22c55e">${g.cache_l2_reported ? num(g.cache_l2_tokens) : '<span class="muted">未上报</span>'}</td>
+      <td class="num" title="命中缓存的请求 ${g.cache_hit_requests ?? 0}/${g.success}">${g.cache_l2_reported ? ((g.cache_hit_request_rate ?? 0) * 100).toFixed(1) + '%' : '<span class="muted">未上报</span>'}</td>
+      <td class="num">${num(g.total_tokens)}</td>
+    </tr>`;
+  }).join('');
+
+  // 趋势图：八张图共用同一份「供应商/模型 → 颜色槽位」注册，颜色跟随实体
+  charts.update(keys, chartHistory);
+
+  updateJobState(d.job, running);
+}
+
+// ── 任务阶段 + 进度条（开始/停止按钮旁）──
+function updateJobState(job, running) {
+  const stageEl = document.getElementById('jobStage');
+  const wrap = document.getElementById('jobProgressWrap');
+  const bar = document.getElementById('jobProgressBar');
+  const textEl = document.getElementById('jobProgressText');
+  if (!job || job.stage === 'idle') {
+    stageEl.textContent = '';
+    wrap.style.display = 'none';
+    return;
+  }
+  const pct = job.progress != null ? Math.round(job.progress * 100) : null;
+  const pctText = pct != null ? pct + '%' : '';
+  let detail;
+  if (job.mode === 'requests') {
+    detail = `${job.done}/${job.total_requests || 0}（${pctText}），成功 ${job.success} 失败 ${job.failed}`;
+  } else {
+    detail = `已用 ${job.elapsed_s || 0}s${job.duration ? ' / ' + job.duration + 's' : ''}`
+      + (pctText ? `（${pctText}）` : '') + `，正式请求 ${job.done} 次，成功 ${job.success} 失败 ${job.failed}`;
+  }
+  const activeStages = ['starting', 'cache_warmup', 'warmup', 'run'];
+  const active = running && activeStages.includes(job.stage);
+  stageEl.textContent = job.stage_label + (active || job.stage === 'finished' || job.stage === 'stopped' ? '' : '');
+  stageEl.style.color = job.stage === 'finished' ? 'var(--success)'
+    : (job.stage === 'stopped' || job.stage === 'error') ? 'var(--danger)'
+    : 'var(--primary)';
+  if (active) {
+    wrap.style.display = 'block';
+    bar.style.width = (pct != null ? pct : 0) + '%';
+    textEl.textContent = detail;
+  } else {
+    wrap.style.display = 'none';
+    // 结束后在阶段标签里保留最终统计
+    if (job.stage === 'finished' || job.stage === 'stopped') {
+      stageEl.textContent = job.stage_label + '：' + detail;
+    }
+  }
+}
+
+// 趋势图（TrendChart：时间轴 / 网格 / 面积折线 / 十字线 tooltip）实现已抽到公共组件 trend-chart.js
+
+function fmt(v) { if (v == null || isNaN(v)) return '-'; return v >= 100 ? Math.round(v) : v.toFixed(1); }
+function num(v) { return v == null ? '-' : Math.round(v).toLocaleString(); }
+// 每个目标当前阶段的小标记（预热阶段也能在表格里看到，避免误以为模型串行）
+function stageBadge(g) {
+  const s = g.stage || 'run';
+  if (s === 'run') return '';
+  const color = s === 'starting' ? 'var(--text-light)' : 'var(--warning)';
+  return ` <span style="font-size:11px;color:${color};font-weight:500;">${g.stage_label || s}…</span>`;
+}
+function targetName(k, g) {
+  return `<strong>${k}</strong>${stageBadge(g)}`;
+}
+
+// ── 压测配置 ──
+function toggleCustomPrompt() {
+  const isCustom = document.getElementById('cfgPrompt').value === 'custom';
+  document.getElementById('customPromptField').style.display = isCustom ? 'flex' : 'none';
+  // max_tokens 语义随 Prompt 档位变化：快捷档位提示词内置等量输出指令，自定义档位仅作上限
+  const hint = document.getElementById('maxTokensHint');
+  if (hint) {
+    hint.textContent = isCustom
+      ? '自定义提示词下，该数值为最大输出数量上限，实际输出由模型回答决定'
+      : '快捷提示词下，该数值即模型的真实输出数量（提示词内置等量输出指令）';
+  }
+}
+function toggleBudget() {
+  const mode = document.querySelector('input[name=budget]:checked').value;
+  document.getElementById('durationField').style.display = mode === 'duration' ? 'flex' : 'none';
+  document.getElementById('requestsField').style.display = mode === 'requests' ? 'flex' : 'none';
+}
+// 缓存预热次数仅在 warmup 模式下显示（与 runner 执行逻辑一致）
+function toggleCacheMode() {
+  const isWarmup = document.getElementById('cfgCacheMode').value === 'warmup';
+  document.getElementById('cacheWarmupField').style.display = isWarmup ? 'flex' : 'none';
+}
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+function getCollapsedGroups() {
+  try { return new Set(JSON.parse(localStorage.getItem('targetGroupCollapsed') || '[]')); }
+  catch { return new Set(); }
+}
+function saveCollapsedGroups(set) {
+  localStorage.setItem('targetGroupCollapsed', JSON.stringify(Array.from(set)));
+}
+
+// 同步某个供应商分组的「全选」复选框（含半选状态）
+function syncGroupCheck(groupEl) {
+  const all = groupEl.querySelector('.pg-select-all');
+  const cbs = Array.from(groupEl.querySelectorAll('.target-cb'));
+  const checked = cbs.filter(cb => cb.checked).length;
+  all.checked = checked === cbs.length && cbs.length > 0;
+  all.indeterminate = checked > 0 && checked < cbs.length;
+  const countEl = groupEl.querySelector('.pg-count');
+  if (countEl) countEl.textContent = cbs.length ? `${checked}/${cbs.length}` : '0';
+}
+
+function bindTargetGroups(box) {
+  box.querySelectorAll('.provider-group').forEach(groupEl => {
+    const header = groupEl.querySelector('.provider-group-header');
+    const toggle = groupEl.querySelector('.pg-toggle');
+    const selectAll = groupEl.querySelector('.pg-select-all');
+
+    // 点击表头空白/箭头折叠展开；点击供应商名区域只触发组全选
+    header.addEventListener('click', e => {
+      if (e.target.closest('.pg-head-label')) return;
+      groupEl.classList.toggle('collapsed');
+      const collapsed = getCollapsedGroups();
+      const name = groupEl.dataset.provider;
+      if (groupEl.classList.contains('collapsed')) collapsed.add(name); else collapsed.delete(name);
+      saveCollapsedGroups(collapsed);
+    });
+    // 组全选
+    selectAll.addEventListener('click', e => e.stopPropagation());
+    selectAll.addEventListener('change', () => {
+      groupEl.querySelectorAll('.target-cb').forEach(cb => { cb.checked = selectAll.checked; });
+      syncGroupCheck(groupEl);
+    });
+    groupEl.querySelectorAll('.target-cb').forEach(cb =>
+      cb.addEventListener('change', () => syncGroupCheck(groupEl))
+    );
+    syncGroupCheck(groupEl);
+  });
+}
+
+async function loadTargets() {
+  const [provRes, prefRes] = await Promise.all([
+    fetch('/api/providers'),
+    fetch('/api/config/preferences'),
+  ]);
+  const data = await provRes.json();
+  const prefs = await prefRes.json().catch(() => ({}));
+  providersData = data.providers || [];
+  const box = document.getElementById('targetList');
+  if (!providersData.length) {
+    box.innerHTML = '<span class="muted" style="padding:12px;display:block;">暂无供应商，请先在「模型配置」中添加</span>';
+    return;
+  }
+
+  // 上次勾选的目标集合
+  const saved = new Set((prefs.targets || []).map(t => t.provider + '/' + t.model));
+  const collapsed = getCollapsedGroups();
+
+  box.innerHTML = providersData.map(p => {
+    const models = p.models || [];
+    const isCollapsed = collapsed.has(p.name) ? ' collapsed' : '';
+    const rows = models.length
+      ? models.map(m => {
+          const key = p.name + '/' + m;
+          const checked = saved.has(key) ? 'checked' : '';
+          return `<label title="${escHtml(p.name + ' / ' + m)}">
+            <input type="checkbox" class="target-cb" data-provider="${escHtml(p.name)}" data-model="${escHtml(m)}" ${checked}>
+            <span>${escHtml(m)}</span>
+          </label>`;
+        }).join('')
+      : '<div class="pg-empty muted">（无模型，请先在「模型配置」中添加）</div>';
+    return `<div class="provider-group${isCollapsed}" data-provider="${escHtml(p.name)}">
+      <div class="provider-group-header">
+        <span class="pg-toggle">▼</span>
+        <label class="pg-head-label">
+          <input type="checkbox" class="pg-select-all" title="全选/取消该供应商">
+          <span>${escHtml(p.name)}</span>
+          <span class="pg-count muted">${models.length}</span>
+        </label>
+      </div>
+      <div class="provider-group-body">${rows}</div>
+    </div>`;
+  }).join('');
+
+  bindTargetGroups(box);
+  restorePreferences(prefs);
+}
+
+// 回显上次压测参数
+function restorePreferences(p) {
+  if (!p || !Object.keys(p).length) return;
+  if (p.api_style) document.getElementById('cfgApiStyle').value = p.api_style;
+  if (p.prompt) {
+    document.getElementById('cfgPrompt').value = p.prompt;
+    toggleCustomPrompt();
+  }
+  if (p.custom_prompt) document.getElementById('cfgCustomPrompt').value = p.custom_prompt;
+  if (p.max_tokens != null) document.getElementById('cfgMaxTokens').value = p.max_tokens;
+  if (p.concurrency != null) {
+    document.getElementById('cfgConcurrency').value =
+      Array.isArray(p.concurrency) ? p.concurrency.join(',') : p.concurrency;
+  }
+  if (p.wait_time != null) document.getElementById('cfgWaitTime').value = p.wait_time;
+  if (p.stream != null) document.getElementById('cfgStream').checked = p.stream;
+  if (p.enable_thinking != null) document.getElementById('cfgEnableThinking').checked = p.enable_thinking;
+  if (p.cache_mode) document.getElementById('cfgCacheMode').value = p.cache_mode;
+  if (p.cache_warmup != null) document.getElementById('cfgCacheWarmup').value = p.cache_warmup;
+  toggleCacheMode();
+  if (p.warmup != null) document.getElementById('cfgWarmup').value = p.warmup;
+  if (p.timeout != null) document.getElementById('cfgTimeout').value = p.timeout;
+  if (p.retry != null) document.getElementById('cfgRetry').value = p.retry;
+
+  // 预算模式（duration / requests 互斥）
+  const mode = p.budget_mode || (p.requests && !p.duration ? 'requests' : 'duration');
+  const radio = document.querySelector('input[name=budget][value="' + mode + '"]');
+  if (radio) radio.checked = true;
+  if (p.duration != null) document.getElementById('cfgDuration').value = p.duration;
+  if (p.requests != null) document.getElementById('cfgRequests').value = p.requests;
+  toggleBudget();
+}
+
+async function startJob() {
+  const targets = Array.from(document.querySelectorAll('.target-cb:checked')).map(cb => ({
+    provider: cb.dataset.provider, model: cb.dataset.model
+  }));
+  if (!targets.length) { toast('请至少选择一个供应商/模型', 'error'); return; }
+
+  const mode = document.querySelector('input[name=budget]:checked').value;
+  const config = {
+    targets,
+    api_style: document.getElementById('cfgApiStyle').value,
+    prompt: document.getElementById('cfgPrompt').value,
+    custom_prompt: document.getElementById('cfgCustomPrompt').value || null,
+    max_tokens: parseInt(document.getElementById('cfgMaxTokens').value),
+    concurrency: document.getElementById('cfgConcurrency').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)),
+    wait_time: parseFloat(document.getElementById('cfgWaitTime').value) || 0,
+    stream: document.getElementById('cfgStream').checked,
+    enable_thinking: document.getElementById('cfgEnableThinking').checked,
+    cache_mode: document.getElementById('cfgCacheMode').value,
+    // record 模式下该值不生效（runner 仅在 warmup 模式执行缓存预热），仍随表单保存偏好
+    cache_warmup: parseInt(document.getElementById('cfgCacheWarmup').value) || 0,
+    warmup: parseInt(document.getElementById('cfgWarmup').value),
+    timeout: parseFloat(document.getElementById('cfgTimeout').value),
+    retry: parseInt(document.getElementById('cfgRetry').value),
+    duration: mode === 'duration' ? parseFloat(document.getElementById('cfgDuration').value) : null,
+    requests: mode === 'requests' ? parseInt(document.getElementById('cfgRequests').value) : null,
+  };
+
+  // 点击即置灰，避免下一帧 WS（≤1s）到达前重复提交；后续状态由 updateDashboard 接管
+  const btnStart = document.getElementById('btnStart');
+  const btnStop = document.getElementById('btnStop');
+  btnStart.disabled = true;
+  try {
+    const res = await fetch('/api/job/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    const data = await res.json();
+    if (data.error) {
+      toast(data.error, 'error');
+      btnStart.disabled = false; // 启动被拒（校验失败/已有任务由下一帧 WS 纠正）
+      return;
+    }
+    btnStop.disabled = false;
+    toast('压测任务已启动');
+  } catch (e) {
+    btnStart.disabled = false;
+    toast('启动请求失败：' + e, 'error');
+  }
+}
+
+async function stopJob() {
+  // 点击即置灰，防止重复停止；任务真正结束后由 WS 帧保持置灰
+  const btnStop = document.getElementById('btnStop');
+  btnStop.disabled = true;
+  try {
+    const res = await fetch('/api/job/stop', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (data.error) {
+      toast(data.error, 'error');
+      btnStop.disabled = false; // 停止被拒（如任务已结束），恢复可点由下一帧 WS 纠正
+      return;
+    }
+    toast('正在停止任务...');
+  } catch (e) {
+    btnStop.disabled = false;
+    toast('停止请求失败：' + e, 'error');
+  }
+}
+
+// ── 历史记录（一次压测任务一行）──
+const HIST_STAGE_META = {
+  finished: { cls: 'badge-ok', text: '已完成' },
+  stopped: { cls: 'badge-idle', text: '已停止' },
+  error: { cls: 'badge-err', text: '异常' },
+  starting: { cls: 'badge-idle', text: '未收口' },
+};
+async function loadHistory() {
+  const res = await fetch('/api/results/history');
+  const data = await res.json();
+  historyData = data.results || [];
+  const tbody = document.getElementById('historyBody');
+  if (!historyData.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="muted">暂无历史记录</td></tr>';
+    return;
+  }
+  tbody.innerHTML = historyData.map(r => {
+    const time = r.started_at ? new Date(r.started_at).toLocaleString() : '-';
+    const shown = (r.target_names || []).slice(0, 3);
+    const more = (r.target_names || []).length - shown.length;
+    const namesHtml = shown.map(n => '<span style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:12px;">'
+      + escHtml(n) + '</span>').join(' ')
+      + (more > 0 ? ' <span class="muted">等 ' + r.target_count + ' 个</span>' : '');
+    const st = HIST_STAGE_META[r.stage] || { cls: 'badge-idle', text: r.stage };
+    return '<tr>'
+      + '<td>' + time + '</td>'
+      + '<td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+      + (r.multi_model ? '<span class="badge badge-running" style="background:#ede9fe;color:#6d28d9;">多模型</span>' : '')
+      + (r.kind === 'legacy' ? '<span class="muted">旧版</span>' : '')
+      + namesHtml + '</div></td>'
+      + '<td class="num">' + (r.total != null ? r.total : '-') + '</td>'
+      + '<td class="num">' + (r.success != null ? r.success : '-') + '</td>'
+      + '<td class="num">' + (r.failed ? r.failed : 0) + '</td>'
+      + '<td><span class="badge ' + st.cls + '">' + st.text + '</span></td>'
+      + '<td><div class="btn-group">'
+      + '<a class="btn btn-primary btn-sm" href="/job/' + encodeURIComponent(r.id) + '" target="_blank">查看报告</a>'
+      + (r.has_page ? '<a class="btn btn-secondary btn-sm" target="_blank" title="页面快照" href="/api/results/'
+        + encodeURIComponent(r.id) + '/download/report.html?inline=1">🖥️ 页面</a>' : '')
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+}
+
+// ── 模型配置 ──
+async function loadProviders() {
+  const res = await fetch('/api/providers');
+  const data = await res.json();
+  providersData = data.providers || [];
+  const box = document.getElementById('providersList');
+  if (!providersData.length) {
+    box.innerHTML = '<span class="muted">暂无供应商，点击右上角「新增供应商」</span>';
+    return;
+  }
+  box.innerHTML = providersData.map(p => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div>
+          <strong>${p.name}</strong>
+          <span class="muted">${p.base_url}</span>
+          ${p.has_api_key ? '<span class="badge badge-ok">已配置密钥</span>' : '<span class="badge badge-err">无密钥</span>'}
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" onclick="editProvider('${p.name}')">编辑</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProvider('${p.name}')">删除</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${(p.models || []).map(m => `
+          <span style="background:#f1f5f9;padding:4px 10px;border-radius:12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;">
+            ${m}
+            <span style="cursor:pointer;color:#ef4444;" onclick="deleteModel('${p.name}','${m}')">✕</span>
+          </span>`).join('')}
+        <button class="btn btn-secondary btn-sm" onclick="addModelPrompt('${p.name}')">+ 模型</button>
+      </div>
+    </div>`).join('');
+}
+
+let editingProvider = null;
+
+// ── 模型下拉框（弹窗内的临时状态，点「保存」后才写入 providers.yaml）──
+function getModelSelectValues() {
+  return Array.from(document.getElementById('pvModelSelect').options).map(o => o.value);
+}
+function setModelOptions(models) {
+  const sel = document.getElementById('pvModelSelect');
+  sel.innerHTML = '';
+  (models || []).forEach(m => {
+    if (!m) return;
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    sel.appendChild(o);
+  });
+}
+function toggleAddModelRow(show) {
+  const row = document.getElementById('pvAddRow');
+  const visible = show === undefined ? row.style.display === 'none' : !!show;
+  row.style.display = visible ? 'flex' : 'none';
+  if (visible) {
+    const inp = document.getElementById('pvNewModel');
+    inp.value = '';
+    inp.focus();
+  }
+}
+function confirmAddModel() {
+  const inp = document.getElementById('pvNewModel');
+  const model = inp.value.trim();
+  if (!model) { toast('请输入模型名称', 'error'); return; }
+  if (getModelSelectValues().includes(model)) { toast('模型 ' + model + ' 已存在', 'error'); return; }
+  const sel = document.getElementById('pvModelSelect');
+  const o = document.createElement('option');
+  o.value = model; o.textContent = model;
+  sel.appendChild(o);
+  sel.value = model;
+  inp.value = '';
+  inp.focus();
+}
+function removeSelectedModel() {
+  const sel = document.getElementById('pvModelSelect');
+  if (!sel.value) { toast('请先在下拉框中选中要删除的模型', 'error'); return; }
+  const removed = sel.value;
+  sel.remove(sel.selectedIndex);
+  toast('已从下拉框移除 ' + removed + '，保存供应商后生效');
+}
+
+function openProviderModal() {
+  editingProvider = null;
+  document.getElementById('providerModalTitle').textContent = '新增供应商';
+  ['pvName','pvBaseUrl','pvApiKey'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pvApiKey').placeholder = 'sk-...';
+  document.getElementById('pvStyle').value = 'openai';
+  document.getElementById('pvName').disabled = false;
+  document.getElementById('pvMsg').textContent = '';
+  setModelOptions([]);
+  toggleAddModelRow(false);
+  closeFetchModelsModal();
+  document.getElementById('providerModal').style.display = 'flex';
+}
+function editProvider(name) {
+  const p = providersData.find(x => x.name === name);
+  if (!p) return;
+  editingProvider = name;
+  document.getElementById('providerModalTitle').textContent = '编辑供应商：' + name;
+  document.getElementById('pvName').value = p.name;
+  document.getElementById('pvName').disabled = true;
+  document.getElementById('pvBaseUrl').value = p.base_url;
+  document.getElementById('pvApiKey').value = '';
+  document.getElementById('pvApiKey').placeholder = p.has_api_key ? '已配置（留空则不修改）' : 'sk-...';
+  setModelOptions(p.models || []);
+  document.getElementById('pvMsg').textContent = '';
+  toggleAddModelRow(false);
+  closeFetchModelsModal();
+  document.getElementById('providerModal').style.display = 'flex';
+}
+function closeProviderModal() {
+  document.getElementById('providerModal').style.display = 'none';
+  closeFetchModelsModal();
+}
+
+function getProviderFormData() {
+  return {
+    name: document.getElementById('pvName').value.trim(),
+    base_url: document.getElementById('pvBaseUrl').value.trim(),
+    api_key: document.getElementById('pvApiKey').value.trim(),
+    models: getModelSelectValues(),
+  };
+}
+
+async function saveProvider() {
+  const data = getProviderFormData();
+  if (!data.name || !data.base_url) { toast('名称和 Base URL 必填', 'error'); return; }
+  const url = editingProvider ? '/api/providers/' + encodeURIComponent(editingProvider) : '/api/providers';
+  const method = editingProvider ? 'PUT' : 'POST';
+  // api_style 不属于供应商属性，仅测试/拉取时使用，不保存
+  const body = editingProvider ? {
+    base_url: data.base_url,
+    api_key: data.api_key, models: data.models,
+  } : data;
+  const res = await fetch(url, {
+    method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const result = await res.json();
+  if (result.error) { toast(result.error, 'error'); return; }
+  closeProviderModal();
+  toast('保存成功');
+  loadProviders();
+  loadTargets();
+}
+
+async function deleteProvider(name) {
+  if (!confirm('确定删除供应商 ' + name + ' 及其所有模型？')) return;
+  const res = await fetch('/api/providers/' + encodeURIComponent(name), { method: 'DELETE' });
+  const data = await res.json();
+  if (data.error) { toast(data.error, 'error'); return; }
+  toast('已删除');
+  loadProviders();
+  loadTargets();
+}
+
+async function addModelPrompt(provider) {
+  const m = prompt('输入模型名称：');
+  if (!m) return;
+  const res = await fetch('/api/providers/' + encodeURIComponent(provider) + '/models', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: m.trim() }),
+  });
+  const data = await res.json();
+  if (data.error) { toast(data.error, 'error'); return; }
+  toast('模型已添加');
+  loadProviders();
+  loadTargets();
+}
+
+async function deleteModel(provider, model) {
+  if (!confirm('删除模型 ' + model + '？')) return;
+  const res = await fetch('/api/providers/' + encodeURIComponent(provider) + '/models/' + encodeURIComponent(model), { method: 'DELETE' });
+  const data = await res.json();
+  if (data.error) { toast(data.error, 'error'); return; }
+  toast('模型已删除');
+  loadProviders();
+  loadTargets();
+}
+
+// ── 拉取模型列表：结果在子弹窗中勾选，确认后才加入模型下拉框 ──
+let fetchedModels = [];
+async function fetchModels() {
+  const data = getProviderFormData();
+  const name = editingProvider || data.name;
+  // 新供应商无需先保存，直接使用弹窗表单中的参数请求
+  if (!name) { toast('请先填写供应商名称', 'error'); return; }
+  if (!data.base_url) { toast('请先填写 Base URL', 'error'); return; }
+  if (!editingProvider && !data.api_key) { toast('请先填写 API Key', 'error'); return; }
+  const apiStyle = document.getElementById('pvStyle').value;
+  document.getElementById('pvMsg').textContent = '正在拉取模型列表...';
+  const res = await fetch('/api/providers/' + encodeURIComponent(name) + '/fetch-models', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: data.api_key, api_style: apiStyle, base_url: data.base_url,
+    }),
+  });
+  const result = await res.json();
+  const msgEl = document.getElementById('pvMsg');
+  if (result.error) { msgEl.textContent = '✗ ' + result.error; return; }
+  const models = result.models || [];
+  if (!models.length) {
+    msgEl.textContent = '⚠ ' + (result.warning || '拉取到 0 个模型');
+    return;
+  }
+  msgEl.textContent = '拉取到 ' + models.length + ' 个模型，请在弹窗中勾选后加入下拉框';
+  openFetchModelsModal(models);
+}
+
+function openFetchModelsModal(models) {
+  fetchedModels = models || [];
+  const list = document.getElementById('fmList');
+  list.innerHTML = '';
+  const existing = new Set(getModelSelectValues());
+  fetchedModels.forEach(m => {
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:13px;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = m;
+    cb.checked = !existing.has(m);
+    cb.addEventListener('change', updateFmSummary);
+    const span = document.createElement('span');
+    span.textContent = m;
+    label.appendChild(cb);
+    label.appendChild(span);
+    if (existing.has(m)) {
+      const dup = document.createElement('span');
+      dup.className = 'muted';
+      dup.style.fontSize = '11px';
+      dup.textContent = '（已在下拉框中，加入时自动跳过）';
+      label.appendChild(dup);
+      cb.checked = false;
+    }
+    list.appendChild(label);
+  });
+  document.getElementById('fmCheckAll').checked = true;
+  toggleFetchAll(true);
+  document.getElementById('fetchModelsModal').style.display = 'flex';
+}
+function closeFetchModelsModal() {
+  const el = document.getElementById('fetchModelsModal');
+  if (el) el.style.display = 'none';
+}
+function toggleFetchAll(checked) {
+  document.querySelectorAll('#fmList input[type=checkbox]').forEach(cb => { cb.checked = checked; });
+  updateFmSummary();
+}
+function updateFmSummary() {
+  const boxes = Array.from(document.querySelectorAll('#fmList input[type=checkbox]'));
+  const n = boxes.filter(cb => cb.checked).length;
+  document.getElementById('fmSummary').textContent =
+    '已选 ' + n + ' / 共 ' + boxes.length + ' 个';
+}
+function addFetchedModels() {
+  const checked = Array.from(document.querySelectorAll('#fmList input[type=checkbox]:checked')).map(cb => cb.value);
+  if (!checked.length) { toast('请至少勾选一个模型', 'error'); return; }
+  const sel = document.getElementById('pvModelSelect');
+  const existing = new Set(getModelSelectValues());
+  let added = 0;
+  checked.forEach(m => {
+    if (existing.has(m)) return;
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    sel.appendChild(o);
+    existing.add(m);
+    added += 1;
+  });
+  const skipped = checked.length - added;
+  if (added) sel.value = checked.find(m => Array.from(sel.options).some(o => o.value === m));
+  closeFetchModelsModal();
+  toast('已加入 ' + added + ' 个模型' + (skipped ? '，跳过 ' + skipped + ' 个已存在' : '') + '，记得保存供应商');
+}
+
+// ── 测试连接：用下拉框选中的模型发一句「你好」，展示模型实际回复/原始报错 ──
+async function testConnection() {
+  const data = getProviderFormData();
+  const name = editingProvider || data.name;
+  // 新供应商无需先保存，直接使用弹窗表单中的参数请求
+  if (!name) { toast('请先填写供应商名称', 'error'); return; }
+  if (!data.base_url) { toast('请先填写 Base URL', 'error'); return; }
+  if (!editingProvider && !data.api_key) { toast('请先填写 API Key', 'error'); return; }
+  const model = document.getElementById('pvModelSelect').value;
+  if (!model) { toast('请先拉取或添加模型，并在下拉框中选中一个模型', 'error'); return; }
+  const apiStyle = document.getElementById('pvStyle').value;
+  const msgEl = document.getElementById('pvMsg');
+  msgEl.textContent = '测试中...';
+  const res = await fetch('/api/providers/' + encodeURIComponent(name) + '/test-connection', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: data.api_key, api_style: apiStyle, model, base_url: data.base_url,
+    }),
+  });
+  const result = await res.json();
+  msgEl.textContent = '';
+  if (result.status === 'ok') {
+    // 回复正文可能很长（含引用/排版），不铺在页面上，只提示结论
+    toast('✓ 连接成功：模型 ' + model + ' 对「你好」回复正常');
+  } else {
+    // 失败时在 toast 中展示上游原始报错，停留久一些方便查看
+    toast('✗ 连接失败：' + (result.message || '未知错误'), 'error', 10000);
+  }
+}
+
+// ── 飞书配置 ──
+async function loadFeishu() {
+  const res = await fetch('/api/config/feishu');
+  const c = await res.json();
+  document.getElementById('fsEnabled').checked = c.enabled || false;
+  document.getElementById('fsAppId').value = c.app_id || '';
+  document.getElementById('fsAppSecret').value = c.app_secret || '';
+  document.getElementById('fsFolder').value = c.folder_token || '';
+  if (c.title_template) document.getElementById('fsTitle').value = c.title_template;
+  const status = document.getElementById('fsStatus');
+  if (c.enabled && c.app_id && c.app_secret) {
+    status.textContent = '✓ 已配置';
+    status.style.color = 'var(--success)';
+  } else {
+    status.textContent = '⚠ 未配置';
+    status.style.color = 'var(--warning)';
+  }
+}
+function getFeishuForm() {
+  return {
+    enabled: document.getElementById('fsEnabled').checked,
+    app_id: document.getElementById('fsAppId').value.trim(),
+    app_secret: document.getElementById('fsAppSecret').value.trim(),
+    folder_token: document.getElementById('fsFolder').value.trim(),
+    title_template: document.getElementById('fsTitle').value,
+  };
+}
+
+async function saveFeishu() {
+  const config = getFeishuForm();
+  const res = await fetch('/api/config/feishu', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
+  });
+  const data = await res.json();
+  if (data.status === 'ok') toast('飞书配置已保存（注释已保留）'); else toast('保存失败', 'error');
+}
+
+async function testFeishu() {
+  const btn = document.getElementById('btnTestFeishu');
+  const status = document.getElementById('fsStatus');
+  btn.disabled = true;
+  btn.textContent = '测试中...';
+  status.textContent = '正在创建 demo 文档...';
+  status.style.color = 'var(--text-light)';
+  try {
+    const res = await fetch('/api/config/feishu/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(getFeishuForm()),
+    });
+    const data = await res.json();
+    if (data.ok && data.url) {
+      let html = '✓ 测试成功，<a href="' + data.url + '" target="_blank" style="color:var(--primary)">打开 demo 文档</a>';
+      if (data.warning) html += '<br><span style="color:var(--warning);font-size:12px;">⚠ ' + data.warning + '</span>';
+      status.innerHTML = html;
+      status.style.color = data.warning ? 'var(--warning)' : 'var(--success)';
+      toast(data.warning ? '成功，但文件夹无权限已回退' : '飞书连接测试成功');
+    } else {
+      status.textContent = '✗ ' + (data.error || '测试失败');
+      status.style.color = 'var(--danger)';
+      toast(data.error || '测试失败', 'error');
+    }
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔌 测试连接（创建 demo 文档）';
+  }
+}
+
+// ── 初始化 ──
+document.getElementById('pvNewModel').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); confirmAddModel(); }
+});
+toggleCacheMode();
+connect();
+loadTargets();
+// 支持 #history / #models / #feishu 深链（刷新后停留在对应页面）
+(function initFromHash() {
+  const page = (location.hash || '').replace('#', '');
+  if (['history', 'models', 'feishu'].includes(page)) {
+    const el = document.querySelector('.sidebar-item[data-page="' + page + '"]');
+    if (el) switchPage(page, el);
+  }
+})();
+</script>
+</body>
+</html>

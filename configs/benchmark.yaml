@@ -1,0 +1,32 @@
+# =============================================================================
+# 压测参数默认配置
+# =============================================================================
+# 定义压测时的默认参数，可在 Web UI 中覆盖
+
+defaults:
+  # ── Prompt 设置 ──
+  prompt: short              # short / medium / long / very_long / 990k / 1m / custom
+  custom_prompt: null         # 当 prompt=custom 时使用的自定义提示词
+
+  # ── 输出控制 ──
+  max_tokens: 1024             # 最大输出 token 数（设为 1 可测首响延迟）
+  temperature: 0.0            # 采样温度
+  stream: true                # 流式输出
+
+  # ── 压测控制 ──
+  concurrency: 2              # 并发数（支持逗号分隔多值，如 1,5,10,20）
+  duration: 60                # 压测时长（秒），与 requests 二选一
+  requests: 10              # 或按请求数压测
+  warmup: 2                  # 预热次数
+  retry: 1                    # 每请求重试次数
+  timeout: 120                # 超时（秒）
+  wait_time: 0.0              # worker 请求间隔（秒），0 = 连续施压
+
+  # ── 缓存设置 ──
+  # 注意：输入需大于 1K tokens 才会触发模型缓存机制
+  cache_mode: record          # record = 只记录 / warmup = 先预热再测
+  cache_warmup: 2             # 缓存预热次数（cache_mode=warmup 时生效）
+
+  # ── 高级设置 ──
+  api_style: openai           # openai / anthropic（可被 provider 配置覆盖）
+  chunk_timeline: false       # 记录逐 chunk 时间线到 chunks.csv

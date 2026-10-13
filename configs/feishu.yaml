@@ -1,0 +1,37 @@
+# =============================================================================
+# 飞书集成配置
+# =============================================================================
+# 使用飞书 Open API 自动创建文档
+#
+# 配置步骤：
+# 1. 访问 https://open.feishu.cn/app 创建企业自建应用
+# 2. 在"凭证与基础信息"中获取 App ID 和 App Secret
+# 3. 在"权限管理"中添加以下权限：
+#    - docx:document（读写文档）
+#    - drive:drive（访问云空间）
+# 4. 发布应用并等待审批通过
+# 5. 将 App ID 和 App Secret 填入下方配置
+#
+# 可选配置：
+# - folder_token: 指定文档保存的文件夹（从文件夹 URL 中获取）
+#   例如：https://bytedance.feishu.cn/drive/folder/xxx 中的 xxx
+
+feishu:
+  # 是否启用飞书导出功能
+  enabled: false
+
+  # 飞书应用凭证（必填）
+  app_id: "" # 在 https://open.feishu.cn/app 创建应用后获取
+  app_secret: "" # 在"凭证与基础信息"中获取
+
+  # 文档保存位置（可选）
+  folder_token: ""        # 留空则保存到"我的空间"根目录
+
+  # 文档标题模板
+  # 单次压测支持变量：{date} {provider} {model}
+  # 批量压测支持变量：{date} {providers} {models} {count}
+  # 例如：
+  #   单次：llm-bench 压测报告 - {provider}/{model} - {date}
+  #   批量：llm-bench 批量压测报告 - {count}个模型 - {date}
+  #   批量：llm-bench 压测报告 - {providers} - {date}
+  title_template: "llm-bench 压测报告 - {provider}/{model} - {date}"

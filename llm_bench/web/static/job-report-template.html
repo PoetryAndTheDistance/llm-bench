@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llm-bench 压测页面报告</title>
+<style>
+:root {
+  --bg: #f1f5f9;
+  --card: #fff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-light: #64748b;
+  --primary: #3b82f6;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 24px; }
+.report-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.report-head h1 { font-size: 22px; font-weight: 600; }
+.subtitle { color: var(--text-light); font-size: 13px; margin-top: 2px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-body { padding: 18px; }
+.badge { display: inline-block; padding: 3px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.badge-ok { background: #dcfce7; color: #16a34a; }
+.badge-stop { background: #f1f5f9; color: #475569; border: 1px solid var(--border); }
+.badge-err { background: #fee2e2; color: #dc2626; }
+.muted { color: var(--text-light); font-size: 12px; }
+.summary-line { font-size: 14px; line-height: 1.9; }
+.summary-line strong { font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: #f8fafc; font-weight: 600; color: var(--text-light); font-size: 12px; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: none; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px 24px; }
+.kv .row { display: flex; gap: 8px; font-size: 13px; line-height: 1.7; }
+.kv .k { color: var(--text-light); min-width: 96px; flex-shrink: 0; }
+.kv .v { word-break: break-all; }
+.prompt-box {
+  margin-top: 12px; background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 14px; white-space: pre-wrap;
+  font-size: 13px; line-height: 1.7;
+}
+.subtabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 16px; }
+.subtab {
+  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500;
+  color: var(--text-light); border-bottom: 2px solid transparent; margin-bottom: -2px;
+}
+.subtab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.subtab-content { display: none; }
+.subtab-content.active { display: block; }
+code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  background: #f1f5f9; padding: 2px 6px; border-radius: 4px;
+  font-size: 12px; word-break: break-all;
+}
+ul.dirs { padding-left: 20px; line-height: 2; }
+.footer { text-align: center; color: var(--text-light); font-size: 12px; margin: 24px 0 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="report-head">
+    <div>
+      <h1>压测页面报告</h1>
+      <div class="subtitle" id="subtitle"></div>
+    </div>
+    <span id="headBadge" class="badge"></span>
+  </div>
+
+  <!-- 任务结论 -->
+  <div class="card">
+    <div class="card-header">任务结果</div>
+    <div class="card-body">
+      <div class="summary-line" id="summaryLine"></div>
+      <div class="summary-line" id="timeLine"></div>
+    </div>
+  </div>
+
+  <!-- 压测参数 -->
+  <div class="card">
+    <div class="card-header">压测参数</div>
+    <div class="card-body">
+      <div class="kv" id="paramList"></div>
+      <div id="promptBox"></div>
+    </div>
+  </div>
+
+  <!-- 首请求校验：与压测页同一组件（数据已冻结在本文件内，离线可展开） -->
+  <div class="card" id="firstExchangeCard">
+    <div class="card-header">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="fe-card-toggle">▶</span>
+        <span>首请求校验</span>
+        <span class="muted" style="font-weight:400;font-size:12px;">
+          各模型首个请求的完整请求 / 返回 Body，用于核对请求参数与返回内容（不含请求头与 API Key）
+        </span>
+      </span>
+      <span id="firstExchangeCount" class="fe-badge fe-badge-idle">0</span>
+    </div>
+    <div class="card-body collapsed" id="firstExchangeBody">
+      <div id="firstExchangeList" class="muted" style="font-size:13px;">
+        任务启动后，将在此按模型展示首个请求（缓存预热 / 预热 / 正式压测中取最早一次），点击模型行展开
+      </div>
+    </div>
+  </div>
+
+  <!-- 实时指标终态（与压测页相同的三个 Tab + 同一套趋势图组件） -->
+  <div class="card">
+    <div class="card-header">实时指标</div>
+    <div class="card-body">
+      <div class="subtabs">
+        <div class="subtab active" onclick="switchSubtab('latency', this)">延迟指标</div>
+        <div class="subtab" onclick="switchSubtab('throughput', this)">吞吐指标</div>
+        <div class="subtab" onclick="switchSubtab('tokens', this)">Token 消耗</div>
+      </div>
+
+      <div class="subtab-content active" id="subtab-latency">
+        <table>
+          <thead><tr>
+            <th>供应商/模型</th><th class="num">请求数</th><th class="num">成功率</th>
+            <th class="num">TTFT p50</th><th class="num">TTFT p95</th><th class="num">TTFT p99</th>
+            <th class="num">E2E p50</th><th class="num">E2E p95</th>
+          </tr></thead>
+          <tbody id="latencyBody"></tbody>
+        </table>
+        <div class="trend-legend" id="latencyLegend"></div>
+        <div class="trend-panel">
+          <div class="trend-title">TTFT 趋势<span class="unit">首 token 延迟 p50 · ms</span></div>
+          <div class="trend-surface" id="ttftChart"></div>
+        </div>
+        <div class="trend-panel">
+          <div class="trend-title">E2E 趋势<span class="unit">端到端延迟 p50 · ms</span></div>
+          <div class="trend-surface" id="e2eChart"></div>
+        </div>
+      </div>
+
+      <div class="subtab-content" id="subtab-throughput">
+        <table>
+          <thead><tr>
+            <th>供应商/模型</th><th class="num">请求数</th><th class="num">成功率</th><th class="num">RPM</th>
+            <th class="num">Decode p50</th><th class="num">Prefill p50</th><th class="num">Eff p50</th>
+            <th class="num">Input TPM</th><th class="num">Output TPM</th>
+          </tr></thead>
+          <tbody id="tpsBody"></tbody>
+        </table>
+        <div class="trend-legend" id="throughputLegend"></div>
+        <div class="trend-panel">
+          <div class="trend-title">RPM 趋势<span class="unit">每分钟请求数</span></div>
+          <div class="trend-surface" id="rpmChart"></div>
+        </div>
+        <div class="trend-panel">
+          <div class="trend-title">Decode TPS 趋势<span class="unit">解码吞吐 p50 · tokens/s</span></div>
+          <div class="trend-surface" id="decodeChart"></div>
+        </div>
+        <div class="trend-panel">
+          <div class="trend-title">Prefill TPS 趋势<span class="unit">预填充吞吐 p50 · tokens/s</span></div>
+          <div class="trend-surface" id="prefillChart"></div>
+        </div>
+        <div class="trend-panel">
+          <div class="trend-title">Eff TPS 趋势<span class="unit">有效吞吐 p50 · tokens/s</span></div>
+          <div class="trend-surface" id="effChart"></div>
+        </div>
+        <div class="trend-panel">
+          <div class="trend-title">Input TPM 趋势<span class="unit">输入 token 吞吐 · tokens/min</span></div>
+          <div class="trend-surface" id="inputTpmChart"></div>
+        </div>
+        <div class="trend-panel">
+          <div class="trend-title">Output TPM 趋势<span class="unit">输出 token 吞吐 · tokens/min</span></div>
+          <div class="trend-surface" id="outputTpmChart"></div>
+        </div>
+      </div>
+
+      <div class="subtab-content" id="subtab-tokens">
+        <table>
+          <thead><tr>
+            <th>供应商/模型</th><th class="num">请求数</th><th class="num">成功</th><th class="num">输入</th>
+            <th class="num">输出</th><th class="num">缓存创建 L1</th>
+            <th class="num">缓存命中 L2</th><th class="num">请求缓存命中率</th><th class="num">总计</th>
+          </tr></thead>
+          <tbody id="tokenBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 结果目录 -->
+  <div class="card">
+    <div class="card-header">结果目录</div>
+    <div class="card-body" id="resultDirs"></div>
+  </div>
+
+  <div class="footer" id="footer"></div>
+</div>
+
+<!-- 与压测页共用的趋势图 / 首请求校验组件（生成快照时由后端内联） -->
+__SNAPSHOT_ASSETS__
+
+<script>
+// 任务收口时由后端注入的冻结快照（分组指标 + 全量趋势历史 + 任务参数 + 首请求留证）
+// 注意：模板中 __SNAPSHOT_PAYLOAD__ 由后端整体替换为 JSON，此文件本身不作为 JS 执行
+const SNAPSHOT = __SNAPSHOT_PAYLOAD__;
+
+const EMPTY_ROW = '<tr><td colspan="9" class="muted">无数据（正式压测阶段无完成请求，可能在预热阶段被停止）</td></tr>';
+
+// 与压测页同一套趋势图：颜色槽位、时间轴、网格、面积折线、十字线 tooltip 完全一致
+const charts = TrendCharts.create();
+
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+function fmt(v) { if (v == null || isNaN(v)) return '-'; return v >= 100 ? Math.round(v) : v.toFixed(1); }
+function num(v) { return v == null ? '-' : Math.round(v).toLocaleString(); }
+function fmtTime(iso) {
+  if (!iso) return 'n/a';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? escHtml(iso) : d.toLocaleString();
+}
+
+function switchSubtab(name, el) {
+  document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('subtab-' + name).classList.add('active');
+  // 隐藏的页签宽度为 0，切回来时按实际宽度重绘趋势图
+  charts.redraw();
+}
+
+function stageBadge(g) {
+  const s = g.stage || 'run';
+  if (s === 'run') return '';
+  const color = s === 'starting' ? 'var(--text-light)' : 'var(--warning)';
+  return ' <span style="font-size:11px;color:' + color + ';font-weight:500;">'
+    + escHtml(g.stage_label || s) + '…</span>';
+}
+function targetName(k, g) {
+  return '<strong>' + escHtml(k) + '</strong>' + stageBadge(g);
+}
+
+function render() {
+  const stage = SNAPSHOT.stage || 'finished';
+  const job = SNAPSHOT.job || {};
+  const info = SNAPSHOT.job_info || {};
+  const groups = SNAPSHOT.groups || {};
+  const history = SNAPSHOT.history || [];
+  const config = SNAPSHOT.config || {};
+  const keys = Object.keys(groups);
+
+  // 标题与徽标
+  const targets = (config.targets && config.targets.length)
+    ? config.targets.map(t => escHtml(t.provider + ' / ' + t.model)).join('、')
+    : (info.target_count != null ? info.target_count + ' 个目标' : '');
+  document.getElementById('subtitle').textContent = targets;
+  const badge = document.getElementById('headBadge');
+  if (stage === 'finished') { badge.className = 'badge badge-ok'; badge.textContent = '已完成'; }
+  else if (stage === 'stopped') { badge.className = 'badge badge-stop'; badge.textContent = '已停止'; }
+  else { badge.className = 'badge badge-err'; badge.textContent = '执行异常'; }
+
+  // 任务结论行（与压测页结束态文案一致）
+  const pct = job.progress != null ? Math.round(job.progress * 100) + '%' : '';
+  let detail;
+  if (job.mode === 'requests') {
+    detail = job.done + '/' + (job.total_requests || 0) + (pct ? '（' + pct + '）' : '')
+      + '，成功 ' + (job.success || 0) + '，失败 ' + (job.failed || 0);
+  } else {
+    detail = '已用 ' + (job.elapsed_s || 0) + 's' + (job.duration ? ' / ' + job.duration + 's' : '')
+      + (pct ? '（' + pct + '）' : '') + '，正式请求 ' + (job.done || 0) + ' 次'
+      + '，成功 ' + (job.success || 0) + '，失败 ' + (job.failed || 0);
+  }
+  document.getElementById('summaryLine').innerHTML =
+    '<strong>' + escHtml(job.stage_label || '') + '</strong>　' + escHtml(detail)
+    + (info.error ? '<br><span style="color:var(--danger)">异常信息：' + escHtml(info.error) + '</span>' : '');
+  document.getElementById('timeLine').innerHTML =
+    '开始：' + fmtTime(info.started_at) + '　｜　结束：' + fmtTime(info.ended_at);
+
+  // 参数卡
+  const rows = [];
+  const addRow = (k, v) => rows.push(
+    '<div class="row"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>');
+  addRow('目标数', escHtml(info.target_count != null ? info.target_count : keys.length));
+  if (config.api_style) addRow('请求协议', escHtml(config.api_style));
+  if (config.concurrency != null)
+    addRow('并发数', escHtml(Array.isArray(config.concurrency) ? config.concurrency.join(',') : config.concurrency));
+  if (config.prompt) addRow('Prompt 档位', escHtml(config.prompt));
+  if (config.max_tokens != null) addRow('max_tokens', escHtml(config.max_tokens));
+  if (config.duration != null) addRow('压测时长', escHtml(config.duration) + ' s');
+  if (config.requests != null) addRow('请求总数', escHtml(config.requests));
+  if (config.timeout != null) addRow('超时', escHtml(config.timeout) + ' s');
+  if (config.retry != null) addRow('重试次数', escHtml(config.retry));
+  if (config.wait_time != null) addRow('请求间隔', escHtml(config.wait_time) + ' s');
+  if (config.warmup != null) addRow('预热次数', escHtml(config.warmup));
+  if (config.cache_mode) addRow('缓存模式', escHtml(config.cache_mode));
+  if (config.cache_warmup != null) addRow('缓存预热次数', escHtml(config.cache_warmup));
+  addRow('流式输出', config.stream ? '是' : '否');
+  if (config.chunk_timeline != null) addRow('chunk 时间线', config.chunk_timeline ? '是' : '否');
+  document.getElementById('paramList').innerHTML = rows.join('');
+  if (config.custom_prompt) {
+    document.getElementById('promptBox').innerHTML =
+      '<div class="muted" style="margin-bottom:6px;">自定义提示词：</div>'
+      + '<div class="prompt-box">' + escHtml(config.custom_prompt) + '</div>';
+  }
+
+  // 三张分组表（列与实时页完全一致）
+  const latency = document.getElementById('latencyBody');
+  const tps = document.getElementById('tpsBody');
+  const tok = document.getElementById('tokenBody');
+  if (!keys.length) {
+    latency.innerHTML = EMPTY_ROW;
+    tps.innerHTML = EMPTY_ROW;
+    tok.innerHTML = EMPTY_ROW;
+  } else {
+    latency.innerHTML = keys.map(k => {
+      const g = groups[k];
+      const rate = (g.success_rate * 100).toFixed(0) + '%';
+      return '<tr><td>' + targetName(k, g) + '</td>'
+        + '<td class="num">' + g.total + '</td>'
+        + '<td class="num">' + rate + '</td>'
+        + '<td class="num">' + fmt(g.ttft && g.ttft.p50 != null ? g.ttft.p50 * 1000 : null) + '</td>'
+        + '<td class="num">' + fmt(g.ttft && g.ttft.p95 != null ? g.ttft.p95 * 1000 : null) + '</td>'
+        + '<td class="num">' + fmt(g.ttft && g.ttft.p99 != null ? g.ttft.p99 * 1000 : null) + '</td>'
+        + '<td class="num">' + fmt(g.e2e && g.e2e.p50 != null ? g.e2e.p50 * 1000 : null) + '</td>'
+        + '<td class="num">' + fmt(g.e2e && g.e2e.p95 != null ? g.e2e.p95 * 1000 : null) + '</td></tr>';
+    }).join('');
+
+    tps.innerHTML = keys.map(k => {
+      const g = groups[k];
+      const rate = (g.success_rate * 100).toFixed(0) + '%';
+      return '<tr><td>' + targetName(k, g) + '</td>'
+        + '<td class="num">' + g.total + '</td>'
+        + '<td class="num">' + rate + '</td>'
+        + '<td class="num">' + fmt(g.rpm) + '</td>'
+        + '<td class="num">' + fmt(g.decode_tps && g.decode_tps.p50) + '</td>'
+        + '<td class="num">' + fmt(g.prefill_tps && g.prefill_tps.p50) + '</td>'
+        + '<td class="num">' + fmt(g.effective_tps && g.effective_tps.p50) + '</td>'
+        + '<td class="num">' + num(Math.round(g.input_tpm)) + '</td>'
+        + '<td class="num">' + num(Math.round(g.output_tpm)) + '</td></tr>';
+    }).join('');
+
+    tok.innerHTML = keys.map(k => {
+      const g = groups[k];
+      return '<tr><td>' + targetName(k, g) + '</td>'
+        + '<td class="num">' + g.total + '</td>'
+        + '<td class="num">' + g.success + '</td>'
+        + '<td class="num">' + num(g.input_tokens) + '</td>'
+        + '<td class="num">' + num(g.output_tokens) + '</td>'
+        + '<td class="num" style="color:#f59e0b">'
+        + (g.cache_l1_reported ? num(g.cache_l1_tokens) : '<span class="muted">未上报</span>') + '</td>'
+        + '<td class="num" style="color:#22c55e">'
+        + (g.cache_l2_reported ? num(g.cache_l2_tokens) : '<span class="muted">未上报</span>') + '</td>'
+        + '<td class="num" title="命中缓存的请求 ' + (g.cache_hit_requests || 0) + '/' + g.success + '">'
+        + (g.cache_l2_reported ? ((g.cache_hit_request_rate || 0) * 100).toFixed(1) + '%' : '<span class="muted">未上报</span>') + '</td>'
+        + '<td class="num">' + num(g.total_tokens) + '</td></tr>';
+    }).join('');
+  }
+
+  // 四张趋势图（全量冻结历史，与实时页同一绘制逻辑）
+  charts.update(keys, history);
+
+  // 首请求校验：完整 body 已冻结在本文件内，展开无需网络请求
+  renderFirstExchanges();
+
+  // 结果目录
+  const dirs = SNAPSHOT.result_dirs || [];
+  document.getElementById('resultDirs').innerHTML = dirs.length
+    ? '<ul class="dirs">' + dirs.map(d => '<li><code>' + escHtml(d) + '</code></li>').join('') + '</ul>'
+    : '<span class="muted">本次任务无落盘结果目录</span>';
+
+  document.getElementById('footer').textContent =
+    '本文件为压测结束时自动生成的页面数据快照（自包含、可离线查看） · 生成于 '
+    + fmtTime(SNAPSHOT.generated_at);
+}
+
+// 首请求留证阶段码中文标签（与后端 broadcaster _EXCHANGE_PHASE_LABEL 一致）
+const EXCHANGE_PHASE_LABEL = { cache_warmup: '缓存预热', warmup: '预热', run: '正式压测' };
+let feUi = null;
+function renderFirstExchanges() {
+  const exchanges = SNAPSHOT.first_exchanges || {};
+  const index = {};
+  Object.keys(exchanges).forEach(k => {
+    const ex = exchanges[k];
+    index[k] = {
+      provider: ex.provider,
+      model: ex.model,
+      phase: ex.phase,
+      phase_label: EXCHANGE_PHASE_LABEL[ex.phase] || ex.phase,
+      http_status: ex.http_status,
+      success: ex.success,
+      streamed: ex.streamed,
+      error_type: ex.error_type,
+      error_message: ex.error_message,
+      start_time: ex.start_time,
+      end_time: ex.end_time,
+    };
+  });
+  feUi = FirstExchange.mount({
+    resolve(key) { return exchanges[key] || null; },
+  });
+  feUi.setIndex(index);
+}
+
+render();
+</script>
+</body>
+</html>

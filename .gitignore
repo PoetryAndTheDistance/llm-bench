@@ -1,0 +1,21 @@
+# Build artifacts
+build/dist/
+build/pyinstaller_work/
+dist/
+*.spec
+*.pyc
+__pycache__/
+
+# IDE
+.idea/
+.vscode/
+
+# Virtual environment
+.venv/
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+results/*

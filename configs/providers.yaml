@@ -1,0 +1,37 @@
+# =============================================================================
+# 供应商/模型配置
+# =============================================================================
+# 定义可用的 LLM API 供应商及其模型
+#
+# base_url 填写【根域名】即可，请求路径会根据压测时选择的协议自动拼接：
+#   - openai 协议    → {base_url}/v1/chat/completions，模型列表 {base_url}/v1/models
+#   - anthropic 协议 → {base_url}/v1/messages
+#
+# 密钥配置方式：
+#   1. api_key: 直接填写密钥（注意：不要提交到版本库！）
+#
+# 鉴权与深度思考参数无需配置，客户端自动双发兼容：
+#   - 请求头同时携带 Authorization: Bearer 与 X-Api-Key，服务端各取所需
+#   - 深度思考开关同时下发 enable_thinking(bool) 与 thinking.type 两套方言，
+#     被严格网关拒绝（400/422 未知字段）时自动剥离重试
+#
+# 注意：请求协议（openai / anthropic）在「压测」页面和「测试连接」时选择，
+#       不在此文件中配置。
+
+providers:
+  - name: 模型提供商名称
+    base_url: https://*****
+    api_key: ""  # 直接填写密钥
+    enabled: true
+    models:
+      - 模型id-1
+      - 模型id-2
+      # - deepseek-v4-flash-0731
+
+  # ── 示例：Anthropic 原生接口（根域名，压测时选 anthropic 协议）──
+  # - name: anthropic_direct
+  #   base_url: https://api.anthropic.com
+  #   api_key: "sk-ant-xxx"  # 或使用 api_key_env: ANTHROPIC_API_KEY
+  #   enabled: true
+  #   models:
+  #     - claude-sonnet-4-20250514
