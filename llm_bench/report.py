@@ -1712,7 +1712,7 @@ def format_analysis_markdown(
     lines: list[str] = [
         "# llm-bench 对比分析",
         "",
-        f"生成时间：{now}  运行次数：{len(rows)}",
+        f"生成时间：{now}  模型数量：{len(rows)}",
         "",
         "## 测试条件",
         "",
