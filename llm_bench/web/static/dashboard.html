@@ -118,6 +118,57 @@ body {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(59,130,246,.1);
 }
+
+/* ── 注意图标 + 悬浮说明 ── */
+.tip-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--warning);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  user-select: none;
+}
+.tip-icon .tip-content {
+  display: none;
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 100;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 40px));
+  padding: 10px 12px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(15,23,42,.28);
+  text-align: left;
+}
+/* 填补图标与气泡之间的间隙，鼠标下移时不会丢失 hover */
+.tip-icon .tip-content::before {
+  content: '';
+  position: absolute;
+  top: -6px; left: 0; right: 0;
+  height: 6px;
+}
+.tip-icon:hover .tip-content,
+.tip-icon:focus-within .tip-content { display: block; }
+.tip-content .tip-title { display: block; font-weight: 600; color: #fff; margin-bottom: 4px; }
+.tip-content .tip-item { display: block; }
+.tip-content .tip-example { display: block; margin-top: 4px; color: #94a3b8; }
+.tip-content .tip-warn { display: block; margin-top: 6px; color: #fbbf24; font-weight: 600; }
 .radio-group { display: flex; gap: 16px; padding-top: 6px; }
 .radio-group label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
 
@@ -289,7 +340,7 @@ tr:hover td { background: #fafbfc; }
             </select>
           </div>
           <div class="form-field">
-            <label>max_tokens（设为 1 可测首响延迟）</label>
+            <label>max_tokens<span class="tip-icon" tabindex="0" aria-label="注意">!<span class="tip-content"><span class="tip-title">该参数为请求参数的 max_tokens</span><span class="tip-item">1、设为 1 可测首响延迟</span><span class="tip-item">2、自定义提示词下，max_tokens 为最大输出数量上限，实际输出由模型回答决定</span><span class="tip-item">3、快捷提示词下，max_tokens 为最大输出数量上限，但提示词内置等量输出指令，所以该数值即模型的真实输出数量</span><span class="tip-example">举例：设置 max_tokens=100，提示词就是内置输出 100 个 “ping”的指令。但深度思考开启时，深度思考也占输出 token，可能导致输出总 token=100，而 content 不到 100 token。</span><span class="tip-warn">格外注意：有些模型是必须开启深度思考的，通过参数关闭深度思考不生效。</span></span></span></label>
             <input type="number" id="cfgMaxTokens" value="500" min="1">
             <div id="maxTokensHint" class="muted" style="font-size:12px;margin-top:4px;line-height:1.4;">快捷提示词下，该数值即模型的真实输出数量（提示词内置等量输出指令）</div>
           </div>
@@ -333,7 +384,7 @@ tr:hover td { background: #fafbfc; }
               <option value="record">record（只记录，不预热缓存）</option>
               <option value="warmup">warmup（先做缓存预热）</option>
             </select>
-            <div class="muted" style="font-size:12px;margin-top:4px;line-height:1.4;">提示：输入需大于 1024 tokens 才会触发模型缓存机制</div>
+            <div class="muted" style="font-size:12px;margin-top:4px;line-height:1.4;">提示：大多数模型输入需大于 1024 tokens 才会触发模型缓存机制</div>
           </div>
           <div class="form-field" id="cacheWarmupField" style="display:none;">
             <label>缓存预热次数 cache_warmup（单并发，仅 warmup 模式生效）</label>
